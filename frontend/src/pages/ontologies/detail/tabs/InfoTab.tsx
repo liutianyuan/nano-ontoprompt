@@ -69,17 +69,18 @@ function ValidationReportCard({ report }: { report: any }) {
 }
 
 const STAGE_KEYS = [
-  { key: 'queued',            i18nKey: 'extract.stage_queued' },
-  { key: 'loading files',     i18nKey: 'extract.stage_loading' },
-  { key: 'calling LLM',      i18nKey: 'extract.stage_llm' },
-  { key: 'validating output', i18nKey: 'extract.stage_validating' },
-  { key: 'saving results',    i18nKey: 'extract.stage_saving' },
-  { key: 'done',              i18nKey: 'extract.stage_done' },
+  { key: 'queued',               i18nKey: 'extract.stage_queued' },
+  { key: 'loading files',        i18nKey: 'extract.stage_loading' },
+  { key: 'calling LLM',         i18nKey: 'extract.stage_llm' },
+  { key: 'validating output',   i18nKey: 'extract.stage_validating' },
+  { key: 'inferring relations', i18nKey: 'extract.stage_inferring' },
+  { key: 'saving results',      i18nKey: 'extract.stage_saving' },
+  { key: 'done',                 i18nKey: 'extract.stage_done' },
 ]
 
 const STAGE_PCT: Record<string, number> = {
   queued: 0, 'loading files': 10, 'calling LLM': 40,
-  'validating output': 65, 'saving results': 80, done: 100,
+  'validating output': 65, 'inferring relations': 75, 'saving results': 85, done: 100,
 }
 
 const lastTaskKey = (oid: string) => `ontoprompt_last_task_${oid}`

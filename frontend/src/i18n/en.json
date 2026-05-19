@@ -110,6 +110,7 @@
     "stage_loading": "Loading Files",
     "stage_llm": "LLM Extraction",
     "stage_validating": "Validating",
+    "stage_inferring": "Inferring Relations",
     "stage_saving": "Saving",
     "stage_done": "Done"
   },

@@ -110,6 +110,7 @@
     "stage_loading": "加载文件",
     "stage_llm": "LLM 提取",
     "stage_validating": "校验输出",
+    "stage_inferring": "补全关系",
     "stage_saving": "保存结果",
     "stage_done": "完成"
   },

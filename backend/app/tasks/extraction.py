@@ -181,7 +181,7 @@ def run_extraction(self, task_id: str):
         result = _calibrate_confidence(result)
 
         # ── P0 validation ────────────────────────────────────────────────────
-        task.progress = {"stage": "validating output", "pct": 60}
+        task.progress = {"stage": "validating output", "pct": 65}
         db.commit()
 
         from app.engine.post_harness.validator import PostHarnessValidator
@@ -214,7 +214,7 @@ def run_extraction(self, task_id: str):
         sparse = relation_count < max(5, entity_count * 0.4)
         many_isolated = isolated_count > max(2, entity_count * 0.3)
         if entity_count >= 5 and (sparse or many_isolated):
-            task.progress = {"stage": "inferring relations", "pct": 70}
+            task.progress = {"stage": "inferring relations", "pct": 75}
             db.commit()
             extra_rels = infer_relations(
                 entities_extracted, relations_extracted,
@@ -232,7 +232,7 @@ def run_extraction(self, task_id: str):
                         result["relations"].append(r)
                 result = _calibrate_confidence(result)
 
-        task.progress = {"stage": "saving results", "pct": 80}
+        task.progress = {"stage": "saving results", "pct": 85}
         db.commit()
 
         # ── Cleanup pre-existing duplicates (keep best, delete extras) ────────
