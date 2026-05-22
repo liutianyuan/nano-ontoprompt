@@ -13,7 +13,7 @@ import { mkdirSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BASE = 'http://localhost:5173';
-const API  = 'http://localhost:8002/api/v1';
+const API  = 'http://localhost:8000/api/v1';
 const SSDIR = path.join(__dirname, 'screenshots_complex');
 const DOCS  = path.join(__dirname, '../test_data/documents');
 
