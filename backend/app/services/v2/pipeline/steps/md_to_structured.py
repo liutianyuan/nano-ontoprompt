@@ -218,11 +218,15 @@ class MarkdownToStructuredStep(PipelineStep):
             }
             start_index = len(result)
 
-            # ① IF-THEN 规则提取
+            # ① IF-THEN 规则提取 (含 PDF 常见的逗号形式: IF <条件>, <动作>)
             rules = re.findall(
                 r'IF\s+(.+?)\s+THEN\s+(.+?)(?=\n|$)',
                 md, re.IGNORECASE | re.MULTILINE
             )
+            for line in md.splitlines():
+                m = re.match(r'^\s*IF\s+([^,，]+?)[,，]\s*(.+)$', line, re.IGNORECASE)
+                if m and not re.search(r'\bTHEN\b', line, re.IGNORECASE):
+                    rules.append((m.group(1), m.group(2)))
             for idx, (condition, action) in enumerate(rules, start=1):
                 out = dict(base)
                 out.update(common)
@@ -244,6 +248,14 @@ class MarkdownToStructuredStep(PipelineStep):
                 out.update(item)
                 result.append(out)
 
+            # ②b 定义行提取: Name (qualifier): description
+            def_rows = self._extract_definition_records(md, str(source_file))
+            for item in def_rows:
+                out = dict(base)
+                out.update(common)
+                out.update(item)
+                result.append(out)
+
             # ③ Markdown/PPTX/DOCX 章节拆行。表格/规则之外仍保留章节语义。
             section_rows = self._extract_section_records(md, str(source_file), limit=max(10, 30 - len(table_rows) - len(rules)))
             for item in section_rows:
@@ -253,29 +265,21 @@ class MarkdownToStructuredStep(PipelineStep):
                 result.append(out)
 
             # ④ 中文企业/组织名提取
-            org_names = re.findall(
-                r'[一-龥]{2,10}(?:公司|集团|科技|物流|铝业|五金|包装|原材料)',
-                md
-            )
-            thresholds = re.findall(r'(\d[\d,\.]+)\s*(?:万元?|吨|件|小时|天|%|个月|季度)', md)
-            numeric_kvs = re.findall(r'\|\s*([^\|]+)\s*\|\s*(\d[\d,\.]*)\s*\|', md)
-            enrich = {
-                "organizations": ", ".join(list(dict.fromkeys(org_names))[:8]) if org_names else "",
-                "thresholds": ", ".join(thresholds[:6]) if thresholds else "",
-                "numeric_fields": json.dumps({k.strip(): v for k, v in numeric_kvs[:8]}, ensure_ascii=False) if numeric_kvs else "",
-            }
+            # 按行提取企业名/数值 — 只看该记录自己的文本, 避免文档级字段把每条
+            # 记录都连到全部公司 (跨数据集 Link 推断依赖该字段的精确性)
             for out in result[start_index:]:
-                out.update({k: v for k, v in enrich.items() if v})
+                self._enrich_record(out)
 
-            if not rules and not table_rows and not section_rows:
+            if not rules and not table_rows and not def_rows and not section_rows:
                 out = dict(base)
                 out.update(common)
                 out.update({
                     "record_id": f"{source_file}:document:1",
                     "row_type": "document",
                     "rule_count": 0,
+                    "document_text": md[:2000],
                 })
-                out.update({k: v for k, v in enrich.items() if v})
+                self._enrich_record(out, extra_text=md)
                 result.append(out)
 
         ctx.meta["md_to_structured"] = {
@@ -285,6 +289,24 @@ class MarkdownToStructuredStep(PipelineStep):
             "emitted_records": len(result),
         }
         return result
+
+    _RECORD_META_KEYS = {"doc_summary", "sections", "source_file", "filename", "record_id",
+                         "row_type", "extraction_method", "storage_uri", "markdown_text",
+                         "source_dataset_id", "extraction_strategy"}
+
+    def _enrich_record(self, out: dict, extra_text: str = "") -> None:
+        """从记录自身文本提取企业名/数值阈值, 写入 organizations/thresholds 字段"""
+        own_text = " ".join(
+            str(v) for k, v in out.items()
+            if isinstance(v, str) and v and k not in self._RECORD_META_KEYS
+        ) + " " + extra_text
+        org_names = re.findall(
+            r'[一-龥]{2,10}(?:公司|集团|科技|物流|铝业|五金|包装|原材料)', own_text)
+        thresholds = re.findall(r'(\d[\d,\.]+)\s*(?:万元?|吨|件|小时|天|%|个月|季度)', own_text)
+        if org_names:
+            out["organizations"] = ", ".join(list(dict.fromkeys(org_names))[:8])
+        if thresholds:
+            out["thresholds"] = ", ".join(thresholds[:6])
 
     def _split_table_cells(self, line: str) -> list[str]:
         return [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -331,9 +353,41 @@ class MarkdownToStructuredStep(PipelineStep):
             i += 1
         return records
 
+    def _extract_definition_records(self, md: str, source_file: str, limit: int = 20) -> list[dict]:
+        """提取定义行: Name (qualifier): description (PDF/纯文本中常见的实体定义形态)"""
+        records: list[dict] = []
+        for line in md.splitlines():
+            m = re.match(
+                r'^([A-Za-z一-龥][\w一-龥 /\-]{0,40}?)\s*[(（]([^)）]{1,40})[)）]\s*[:：]\s*(.+)$',
+                line.strip()
+            )
+            if not m:
+                continue
+            name, qualifier, desc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+            # 排除步骤行 (Step 1: ...) 与纯数字限定语
+            if re.match(r'^(step|阶段|步骤)\s*\d*$', name, re.IGNORECASE):
+                continue
+            records.append({
+                "record_id": f"{source_file}:definition:{len(records) + 1}",
+                "row_type": "definition",
+                "name": name,
+                "qualifier": qualifier,
+                "definition": desc[:500],
+            })
+            if len(records) >= limit:
+                break
+        return records
+
     def _extract_section_records(self, md: str, source_file: str, limit: int = 30) -> list[dict]:
         records: list[dict] = []
         matches = list(re.finditer(r"^(#{1,6})\s+(.+)$", md, flags=re.MULTILINE))
+        if not matches:
+            # PDF 转出的纯文本没有 # 标题, 尝试用编号标题 (1. Title) 作为章节边界
+            # group(2) 为标题, 与 markdown 标题正则保持一致
+            matches = [
+                m for m in re.finditer(r"^\s*(\d+[\.、)])\s+(\S[^\n]{0,60}?)\s*$", md, flags=re.MULTILINE)
+                if not re.match(r"^\s*\d+[\.、)]\s+(IF|Step)\b", m.group(0), re.IGNORECASE)
+            ]
         if not matches:
             text = md.strip()
             return [{

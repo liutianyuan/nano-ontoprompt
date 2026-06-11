@@ -188,13 +188,19 @@ class MappingService:
                     src_sample_rows=src_meta.get("rows", []),
                     tgt_pk_values=tgt_pk_values,
                 )
-                if not fk_candidates:
-                    continue
+
+                # 跨数据集备用键推断 (PRD §2.4 ③): 目标近唯一非主键列的值重叠
+                fk_cols_used = {c for c, _ in fk_candidates}
+                results.extend(self._infer_alt_key_relations(
+                    ontology_id, src_m, src_meta, tgt_m, tgt_meta,
+                    skip_src_cols=fk_cols_used, link_model=OntologyLinkMapping,
+                ))
 
                 for fk_col, rel_type in fk_candidates:
                     written = 0
                     src_values: list[str] = []
                     tgt_values: list[str] = []
+                    seen_pairs: set[tuple[str, str]] = set()
                     for row in src_meta["rows"]:
                         fk_val = str(row.get(fk_col, ""))
                         if not fk_val:
@@ -210,6 +216,10 @@ class MappingService:
                                 tgt_eid = tgt_id_map.get(self._lookup_identity_value(tgt_pk_col, raw))
                         if not src_eid or not tgt_eid:
                             continue
+                        # 多行映射同一实体对时去重 (如订单按 items 展开的多行)
+                        if (src_eid, tgt_eid) in seen_pairs:
+                            continue
+                        seen_pairs.add((src_eid, tgt_eid))
                         src_exists = self._db.query(Entity).filter(Entity.id == src_eid).first()
                         tgt_exists = self._db.query(Entity).filter(Entity.id == tgt_eid).first()
                         if not src_exists or not tgt_exists:
@@ -251,6 +261,144 @@ class MappingService:
                                         "cardinality": cardinality,
                                         "link_mapping_id": inferred_link.id if inferred_link else None,
                                         "link_mapping_status": inferred_link.status if inferred_link else None})
+        return results
+
+    # ── 跨数据集备用键推断 (PRD §2.4 ③ "跨数据集关系推断") ──────────────
+
+    def _detect_alt_key_columns(self, rows: list[dict], pk_col: str | None) -> list[str]:
+        """检测备用键: 近唯一(≥90%)、非纯数字、值长度足够的非主键列 (如 供应商名称)"""
+        import re
+        if not rows:
+            return []
+        alt: list[str] = []
+        for col in rows[0].keys():
+            if col == pk_col:
+                continue
+            vals = [str(r.get(col, "") or "").strip() for r in rows]
+            vals = [v for v in vals if v]
+            if len(vals) < 2:
+                continue
+            if all(re.fullmatch(r"[\d\s\.,%\-]+", v) for v in vals):
+                continue  # 纯数字列(金额/比率)易误连
+            if sum(len(v) >= 3 for v in vals) / len(vals) < 0.8:
+                continue  # 短值枚举列(等级/状态)
+            if len(set(vals)) / len(vals) < 0.9:
+                continue
+            alt.append(col)
+        return alt
+
+    def _infer_alt_key_relations(self, ontology_id: str, src_m: OntologyMapping, src_meta: dict,
+                                 tgt_m: OntologyMapping, tgt_meta: dict,
+                                 skip_src_cols: set[str], link_model) -> list[dict]:
+        """源列值(支持逗号等分隔的多值)与目标备用键值重叠 → 推断关系。
+
+        典型场景: 文档记录的 organizations 字段命中 Supplier.供应商名称。
+        """
+        import re
+        from app.models.entity import Entity
+        from app.models.relation import Relation
+
+        tgt_rows = tgt_meta.get("rows", [])
+        tgt_pk_col = tgt_meta["pk_col"]
+        tgt_id_map = tgt_meta["entity_id_map"]
+        tgt_class = tgt_meta["entity_class"]
+        results: list[dict] = []
+
+        # 跳过文档级元数据列与常量列: 全行同值的列不携带行级链接信息,
+        # 否则文档摘要里提到的公司会让该文档所有行都连过去
+        meta_cols = {"doc_summary", "sections", "source_file", "filename",
+                     "markdown_text", "document_text", "extraction_method"}
+        src_rows = src_meta.get("rows", [])
+        usable_src_cols = []
+        for col in src_meta["columns"]:
+            if col in meta_cols or col == src_meta["pk_col"]:
+                continue
+            vals = {str(r.get(col, "") or "").strip() for r in src_rows}
+            vals.discard("")
+            if len(vals) <= 1:
+                continue
+            usable_src_cols.append(col)
+
+        rel_name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", tgt_class).upper()
+        rel_name = re.sub(r"[^A-Z0-9_]", "", rel_name) or "REF"
+        rel_type = f"HAS_{rel_name}"
+
+        for alt_col in self._detect_alt_key_columns(tgt_rows, tgt_pk_col):
+            alt_to_eid: dict[str, str] = {}
+            for row in tgt_rows:
+                v = str(row.get(alt_col, "") or "").strip()
+                if not v:
+                    continue
+                eid = tgt_id_map.get(self._row_identity_value(row, tgt_pk_col))
+                if eid:
+                    alt_to_eid[self._normalize_fk_value(v)] = eid
+            if len(alt_to_eid) < 2:
+                continue
+
+            col_pairs: dict[str, set[tuple[str, str]]] = {}
+            for row in src_meta["rows"]:
+                src_eid = src_meta["entity_id_map"].get(
+                    self._row_identity_value(row, src_meta["pk_col"]))
+                if not src_eid:
+                    continue
+                for col in usable_src_cols:
+                    if col in skip_src_cols:
+                        continue
+                    raw = str(row.get(col, "") or "").strip()
+                    if not raw:
+                        continue
+                    parts = [p.strip() for p in re.split(r"[,，、;；|]", raw) if p.strip()]
+                    for part in parts:
+                        norm = self._normalize_fk_value(part)
+                        if len(norm) < 3:
+                            continue
+                        tgt_eid = alt_to_eid.get(norm)
+                        if tgt_eid:
+                            col_pairs.setdefault(col, set()).add((src_eid, tgt_eid))
+
+            for col, pairs in col_pairs.items():
+                if not pairs:
+                    continue  # 全名精确匹配(归一化≥3字符)误连概率低, 单行命中即视为有效
+                written = 0
+                src_values, tgt_values = [], []
+                for src_eid, tgt_eid in pairs:
+                    if not self._db.query(Entity).filter(Entity.id == src_eid).first():
+                        continue
+                    if not self._db.query(Entity).filter(Entity.id == tgt_eid).first():
+                        continue
+                    rel = Relation(
+                        id=self._stable_relation_id(ontology_id, src_eid, tgt_eid, rel_type, "fk_inference"),
+                        ontology_id=ontology_id,
+                        source_entity=src_eid, target_entity=tgt_eid,
+                        type=rel_type,
+                        properties={"fk_column": col, "alt_column": alt_col,
+                                    "via": "alternate_key", "source": "fk_inference"},
+                        confidence=0.75,
+                    )
+                    self._db.merge(rel)
+                    src_values.append(src_eid)
+                    tgt_values.append(tgt_eid)
+                    written += 1
+                if not written:
+                    continue
+                cardinality = self._infer_cardinality(src_values, tgt_values)
+                inferred_link = self._upsert_inferred_link_mapping(
+                    ontology_id=ontology_id,
+                    src_dataset_id=src_m.curated_dataset_id,
+                    tgt_dataset_id=tgt_m.curated_dataset_id,
+                    relation_type=rel_type,
+                    src_key=col,
+                    tgt_key=alt_col,
+                    model=link_model,
+                )
+                self._db.commit()
+                self._write_neo4j_relations(ontology_id, src_meta["entity_class"], tgt_class, rel_type)
+                results.append({"src": src_meta["entity_class"], "tgt": tgt_class,
+                                "rel_type": rel_type, "fk_col": col, "alt_col": alt_col,
+                                "via": "alternate_key", "count": written,
+                                "cardinality": cardinality,
+                                "link_mapping_id": inferred_link.id if inferred_link else None,
+                                "link_mapping_status": inferred_link.status if inferred_link else None})
         return results
 
     def _upsert_inferred_link_mapping(
