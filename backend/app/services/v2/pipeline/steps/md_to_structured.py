@@ -14,7 +14,7 @@ def _get_first_model(model_id: str | None = None):
         from app.services.model_config_selector import select_llm_model_config
         return select_llm_model_config(
             model_id=model_id,
-            purpose_tags=("结构化抽取", "LLM结构化", "llm_structurize"),
+            purpose_tags=("结构化提取", "结构化抽取", "LLM结构化", "llm_structurize"),
             allow_vlm=False,
         )
     except Exception:

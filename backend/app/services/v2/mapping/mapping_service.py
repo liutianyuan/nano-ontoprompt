@@ -816,10 +816,37 @@ class MappingService:
         ))
         return True
 
+    @staticmethod
+    def _readable_formula(logic_type: str, expr: dict | None, target: str | None = None) -> str:
+        """把 logic 的结构化 expression 转成人类可读的公式串 (用于 v1 LogicRule.formula)"""
+        e = expr or {}
+        if logic_type == "validation":
+            if e.get("missing_count") is not None:
+                return f"{e.get('column')} 必填（缺失 {e.get('missing_count')} 行）"
+            if e.get("properties"):
+                return f"{target or ''} 字段类型契约（{len(e['properties'])} 个属性）".strip()
+            op = e.get("operator") or e.get("op")
+            if op:
+                return f"{e.get('column') or e.get('field')} {op} {e.get('value')}"
+            return f"{target or ''} 数据质量校验".strip()
+        if logic_type == "state":
+            states = e.get("states") or []
+            shown = ", ".join(str(x) for x in states[:6])
+            return f"{e.get('state_property')} ∈ {{{shown}}}"
+        if logic_type == "mapping":
+            return f"{target} ← curated:{str(e.get('curated_dataset_id') or '')[:8]}"
+        if logic_type == "inference":
+            return f"{e.get('src')} -[{e.get('rel_type')}]-> {e.get('tgt')}"
+        if logic_type == "automation":
+            return f"{e.get('trigger') or 'event'} ⇒ {e.get('effect') or 'action'}"
+        return logic_type
+
     def _upsert_v1_logic(self, ontology_id: str, name: str, logic_type: str, description: str,
-                         linked_entities: list[str] | None = None, confidence: float = 0.85) -> bool:
+                         linked_entities: list[str] | None = None, confidence: float = 0.85,
+                         formula: str | None = None) -> bool:
         from app.models.logic import LogicRule
 
+        formula = formula or logic_type
         self._db.flush()
         exists = self._db.query(LogicRule).filter(
             LogicRule.ontology_id == ontology_id,
@@ -827,7 +854,7 @@ class MappingService:
         ).first()
         if exists:
             exists.description = description
-            exists.formula = logic_type
+            exists.formula = formula
             exists.linked_entities = linked_entities or []
             return False
         self._db.add(LogicRule(
@@ -836,7 +863,7 @@ class MappingService:
             name_cn=name,
             name_en=name.replace(" ", "_").replace(":_", "_"),
             description=description,
-            formula=logic_type,
+            formula=formula,
             confidence=confidence,
             enabled=True,
             status="draft",
@@ -869,6 +896,7 @@ class MappingService:
             ))
             created_v1 += int(self._upsert_v1_logic(
                 ontology_id, mapping_name, "mapping", desc, [m.entity_class], 0.9,
+                formula=self._readable_formula("mapping", expr, m.entity_class),
             ))
 
             for col in meta.get("columns", []):
@@ -886,6 +914,8 @@ class MappingService:
                     ))
                     created_v1 += int(self._upsert_v1_logic(
                         ontology_id, name, "validation", description, [m.entity_class], 0.8,
+                        formula=self._readable_formula(
+                            "validation", {"column": col, "missing_count": missing}, m.entity_class),
                     ))
 
             typed_properties = [
@@ -903,6 +933,8 @@ class MappingService:
                 ))
                 created_v1 += int(self._upsert_v1_logic(
                     ontology_id, name, "validation", description, [m.entity_class], 0.84,
+                    formula=self._readable_formula(
+                        "validation", {"properties": typed_properties, "primary_key": pk_col}, m.entity_class),
                 ))
 
             state_cols = [
@@ -920,6 +952,8 @@ class MappingService:
                     ))
                     created_v1 += int(self._upsert_v1_logic(
                         ontology_id, name, "state", description, [m.entity_class], 0.82,
+                        formula=self._readable_formula(
+                            "state", {"state_property": col, "states": states}, m.entity_class),
                     ))
 
         for rel in relation_results:
@@ -935,6 +969,8 @@ class MappingService:
             ))
             created_v1 += int(self._upsert_v1_logic(
                 ontology_id, name, "inference", description, [rel.get("src"), rel.get("tgt")], 0.85,
+                formula=self._readable_formula("inference", {
+                    "src": rel.get("src"), "tgt": rel.get("tgt"), "rel_type": rel.get("rel_type")}),
             ))
 
         automation_name = "Automation Rule: Approved curated dataset triggers mapping sync"
@@ -946,6 +982,8 @@ class MappingService:
         ))
         created_v1 += int(self._upsert_v1_logic(
             ontology_id, automation_name, "automation", automation_desc, [], 0.86,
+            formula=self._readable_formula(
+                "automation", {"trigger": "curated_review.approved", "effect": "mapping_resync"}),
         ))
 
         self._db.commit()

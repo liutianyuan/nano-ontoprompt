@@ -15,6 +15,24 @@ except ImportError:  # pragma: no cover
 _RETRY_INTERVAL = 60.0
 
 
+def _port_open(uri: str, timeout: float = 0.5) -> bool:
+    """快速探测 bolt URI 的 host:port 是否可连。localhost 强制走 IPv4 避免
+    Windows 上 IPv6(::1) 解析拖慢到 1.6s+。"""
+    import socket
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(uri)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 7687
+        if host in ("localhost", "::1"):
+            host = "127.0.0.1"
+        sock = socket.create_connection((host, port), timeout=timeout)
+        sock.close()
+        return True
+    except Exception:
+        return False
+
+
 class Neo4jService:
     """Neo4j 连接与 CRUD 服务
 
@@ -47,6 +65,10 @@ class Neo4jService:
         try:
             if GraphDatabase is None:
                 raise RuntimeError("neo4j package not installed")
+            # 先用 socket 快速预检端口: 无服务时 driver.verify_connectivity() 要等 ~5s,
+            # socket 预检 0.5s 即可判定不可用, 大幅降低无 Neo4j 时的首屏延迟。
+            if not _port_open(self._uri):
+                raise RuntimeError("Neo4j port not reachable")
             driver = GraphDatabase.driver(
                 self._uri, auth=(self._user, self._password),
                 connection_timeout=3.0,

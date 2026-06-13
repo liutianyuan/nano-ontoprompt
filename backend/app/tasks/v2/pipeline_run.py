@@ -410,8 +410,16 @@ def pipeline_run_task(pipeline_id: str, run_id: str):
             )
             if source["route"] == "C":
                 ctx.spec = dict(ctx.spec or {})
+                # 配置了文本 LLM (如 deepseek) 时用 LLM 自动结构化提取 (PRD F5.6),
+                # 否则规则兜底; LLM 调用失败时 _auto_extract_with_llm 也会回退规则。
+                from app.services.model_config_selector import select_llm_model_config
+                try:
+                    _has_llm = bool(select_llm_model_config(
+                        purpose_tags=("结构化提取", "结构化抽取"), allow_vlm=False))
+                except Exception:
+                    _has_llm = False
                 ctx.spec["md_to_structured"] = {
-                    "rule_based": True,
+                    ("auto_extract" if _has_llm else "rule_based"): True,
                     **(ctx.spec.get("md_to_structured") or {}),
                 }
             ctx.rows_in = len(data)

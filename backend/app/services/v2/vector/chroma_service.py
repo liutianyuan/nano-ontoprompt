@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -11,12 +12,23 @@ try:
 except ImportError:
     chromadb = None
 
+# 连接失败后多少秒内不再重试 (heartbeat 超时会阻塞每个请求数秒)
+_RETRY_INTERVAL = 60.0
+
 
 class ChromaService:
-    """ChromaDB 连接与向量存储/检索服务"""
+    """ChromaDB 连接与向量存储/检索服务
+
+    使用默认配置时全进程共享同一个 client; 连接失败后 60 秒内直接判定不可用,
+    避免每次实例化都触发 heartbeat 超时 (此前 integrations/status 每次卡 ~6 秒)。
+    """
+
+    _shared_client = None
+    _shared_unavailable_until: float = 0.0
 
     def __init__(self, host: str | None = None, port: int | None = None):
         from app.config import settings
+        self._is_default = host is None and port is None
         self._host = host or settings.chroma_host
         self._port = port or settings.chroma_port
         self._client = None
@@ -24,16 +36,29 @@ class ChromaService:
         self._init_client()
 
     def _init_client(self):
+        cls = ChromaService
+        if self._is_default:
+            if cls._shared_client is not None:
+                self._client = cls._shared_client
+                self._available = True
+                return
+            if time.monotonic() < cls._shared_unavailable_until:
+                return
         try:
             if chromadb is None:
                 raise ImportError("chromadb not installed")
-            self._client = chromadb.HttpClient(host=self._host, port=self._port)
-            self._client.heartbeat()
+            client = chromadb.HttpClient(host=self._host, port=self._port)
+            client.heartbeat()
+            self._client = client
             self._available = True
+            if self._is_default:
+                cls._shared_client = client
             logger.info("ChromaDB connected")
         except Exception as e:
             logger.warning(f"ChromaDB unavailable: {e}")
             self._available = False
+            if self._is_default:
+                cls._shared_unavailable_until = time.monotonic() + _RETRY_INTERVAL
 
     @property
     def available(self) -> bool:
