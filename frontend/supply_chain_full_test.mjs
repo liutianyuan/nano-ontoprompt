@@ -14,7 +14,7 @@ import http from 'http';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BASE = 'http://localhost:5173';
+const BASE = 'http://localhost:10080';
 const API  = 'http://localhost:8000';
 const SS   = path.join(__dirname, 'sc_fulltest_screenshots');
 fs.mkdirSync(SS, { recursive: true });
@@ -350,8 +350,8 @@ await ctx.addInitScript(t => {
   localStorage.setItem('token', t);
   localStorage.setItem('lang', 'zh');
 }, token);
-await ctx.route('http://localhost:5173/api/**', async route => {
-  const url = route.request().url().replace('http://localhost:5173', 'http://localhost:8000');
+await ctx.route('http://localhost:10080/api/**', async route => {
+  const url = route.request().url().replace('http://localhost:10080', 'http://localhost:8000');
   try { const r = await route.fetch({ url }); await route.fulfill({ response: r }); }
   catch { await route.continue(); }
 });

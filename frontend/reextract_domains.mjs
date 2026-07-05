@@ -4,7 +4,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 
-const BASE  = 'http://localhost:5173';
+const BASE  = 'http://localhost:10080';
 const API   = 'http://localhost:8002/api/v1';
 const SSDIR = 'E:/零点未来/137. nanoontology/ontoprompt/frontend/screenshots_reextract';
 mkdirSync(SSDIR, { recursive: true });

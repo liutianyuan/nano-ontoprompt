@@ -112,7 +112,7 @@ for name_cn, name_en, formula, conf in rules:
 print("✓ Created logic rules")
 
 print(f"\n📊 Ontology ID: {oid}")
-print(f"   Open: http://localhost:5173/ontologies/{oid}")
+print(f"   Open: http://localhost:10080/ontologies/{oid}")
 
 # ── Register DeepSeek model (API key 从环境变量读取, 不要硬编码) ──────────
 import os

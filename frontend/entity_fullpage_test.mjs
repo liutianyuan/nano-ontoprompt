@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BASE = 'http://localhost:5173';
+const BASE = 'http://localhost:10080';
 const API  = 'http://localhost:8002/api/v1';
 const SSDIR = path.join(__dirname, 'screenshots_entity');
 const OID = 'ef1a1be8-d336-4c82-af43-eddd9fe75019';

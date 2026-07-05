@@ -12,7 +12,7 @@ except ImportError:
     print("pip install playwright && python -m playwright install chromium")
     sys.exit(1)
 
-BASE   = "http://localhost:5173"
+BASE   = "http://localhost:10080"
 SS_DIR = Path(__file__).parent / "screenshots"
 SS_DIR.mkdir(exist_ok=True)
 

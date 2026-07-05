@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import http from 'http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BASE = 'http://localhost:5173';
+const BASE = 'http://localhost:10080';
 const SS   = path.join(__dirname, 'supply_chain_screenshots');
 fs.mkdirSync(SS, { recursive: true });
 
@@ -71,8 +71,8 @@ await ctx.addInitScript(t => {
 }, token);
 
 // 拦截 API 直连后端
-await ctx.route('http://localhost:5173/api/**', async route => {
-  const url = route.request().url().replace('http://localhost:5173', 'http://localhost:8000');
+await ctx.route('http://localhost:10080/api/**', async route => {
+  const url = route.request().url().replace('http://localhost:10080', 'http://localhost:8000');
   try { const r = await route.fetch({ url }); await route.fulfill({ response: r }); }
   catch { await route.continue(); }
 });

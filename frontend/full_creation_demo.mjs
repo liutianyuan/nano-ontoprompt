@@ -15,7 +15,7 @@ import { chromium } from '@playwright/test'
 import { mkdirSync } from 'fs'
 import path from 'path'
 
-const BASE   = 'http://localhost:5173'
+const BASE   = 'http://localhost:10080'
 const SS_DIR = 'full_creation_screenshots'
 mkdirSync(SS_DIR, { recursive: true })
 

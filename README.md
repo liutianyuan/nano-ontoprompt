@@ -81,7 +81,7 @@ docker compose -f docker-compose.v2.yml up --build
 
 This starts PostgreSQL, Redis, Neo4j, MinIO, ChromaDB, backend and frontend. For the lightweight v1 stack use `docker-compose.yml` instead.
 
-Open [http://localhost:5173](http://localhost:5173). Default credentials: `admin / changeme123`.
+Open [http://localhost:10080](http://localhost:10080). Default credentials: `admin / changeme123`.
 
 ### Option 2 — Manual setup (minimal, no external services)
 

@@ -8,7 +8,7 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 
-await page.goto('http://localhost:5173/login');
+await page.goto('http://localhost:10080/login');
 await page.waitForLoadState('networkidle');
 
 const result = await page.evaluate(async () => {
