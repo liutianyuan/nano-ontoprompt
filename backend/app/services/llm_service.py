@@ -1,25 +1,91 @@
 import json
 import re
-from typing import Any
+from typing import Any, Optional
+from app.config import settings
 
-def extract_ontology(text: str, prompt_content: str, model_config: dict, model_name: str, retry_count: int = 3) -> dict:
+
+class LLMRequestError(RuntimeError):
+    pass
+
+
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _llm_timeout(model_config: dict) -> int:
+    options = model_config.get("options") or {}
+    timeout = _positive_int(
+        options.get("timeout") or model_config.get("timeout"),
+        settings.llm_timeout_seconds,
+    )
+    return min(timeout, settings.llm_max_timeout_seconds)
+
+
+def _llm_max_tokens(model_config: dict) -> int:
+    options = model_config.get("options") or {}
+    max_tokens = _positive_int(
+        options.get("max_tokens") or model_config.get("max_tokens"),
+        settings.llm_max_tokens,
+    )
+    return min(max_tokens, settings.llm_max_tokens)
+
+
+def _json_mode_enabled(provider: str, model_config: dict) -> bool:
+    options = model_config.get("options") or {}
+    if "json_mode" in options:
+        return bool(options.get("json_mode"))
+    if "response_format" in options:
+        return bool(options.get("response_format"))
+    return provider == "openai" and not model_config.get("api_base")
+
+
+def extract_ontology(text: str, prompt_content: str, model_config: dict, model_name: str, retry_count: Optional[int] = None) -> dict:
     provider = model_config.get("provider", "openai")
     api_key = model_config.get("api_key", "")
     api_base = model_config.get("api_base")
+    timeout = _llm_timeout(model_config)
+    max_tokens = _llm_max_tokens(model_config)
+    json_mode = _json_mode_enabled(provider, model_config)
+    attempts = retry_count if retry_count is not None else settings.llm_retry_count
+    attempts = max(1, attempts)
 
     messages = [
         {"role": "system", "content": prompt_content},
         {"role": "user", "content": f"请从以下文档中提取本体信息，以JSON格式返回：\n\n{text}"},
     ]
 
-    for attempt in range(retry_count):
+    last_error: Optional[Exception] = None
+    for attempt in range(attempts):
         try:
-            raw = _call_llm(provider, api_key, api_base, model_name, messages)
+            raw = _call_llm(provider, api_key, api_base, model_name, messages, json_mode=json_mode, timeout=timeout, max_tokens=max_tokens)
             return _parse_response(raw)
         except Exception as e:
-            if attempt == retry_count - 1:
-                raise
-    return {}
+            last_error = e
+            if attempt == attempts - 1:
+                base = api_base or "default"
+                raise LLMRequestError(f"模型服务请求失败：model={model_name}, base={base}, timeout={timeout}s, error={e}") from e
+    raise RuntimeError(f"LLM extraction failed: {last_error}")
+
+
+def test_llm_chat(model_config: dict, model_name: str, timeout: Optional[int] = None) -> str:
+    provider = model_config.get("provider", "openai")
+    api_key = model_config.get("api_key", "")
+    api_base = model_config.get("api_base")
+    timeout = timeout or _llm_timeout(model_config)
+    return _call_llm(
+        provider,
+        api_key,
+        api_base,
+        model_name,
+        [{"role": "system", "content": "Return JSON only."}, {"role": "user", "content": "{\"ok\": true}"}],
+        json_mode=False,
+        timeout=timeout,
+        max_tokens=32,
+    )
 
 
 def infer_relations(entities: list, existing_relations: list, text: str,
@@ -31,6 +97,9 @@ def infer_relations(entities: list, existing_relations: list, text: str,
     provider  = model_config.get("provider", "openai")
     api_key   = model_config.get("api_key", "")
     api_base  = model_config.get("api_base")
+    timeout   = _llm_timeout(model_config)
+    max_tokens = min(_llm_max_tokens(model_config), 2048)
+    json_mode = _json_mode_enabled(provider, model_config)
 
     # Build entity snapshot (limit to 50 to keep prompt manageable)
     entity_lines = "\n".join(
@@ -65,7 +134,10 @@ def infer_relations(entities: list, existing_relations: list, text: str,
     try:
         raw = _call_llm(provider, api_key, api_base, model_name,
                         [{"role": "system", "content": system_prompt},
-                         {"role": "user", "content": user_msg}])
+                         {"role": "user", "content": user_msg}],
+                        json_mode=json_mode,
+                        timeout=timeout,
+                        max_tokens=max_tokens)
         parsed = _parse_response(raw)
         candidates = parsed.get("relations", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
 
@@ -82,12 +154,14 @@ def infer_relations(entities: list, existing_relations: list, text: str,
         return []  # relation inference failure is non-fatal
 
 
-def _call_llm(provider: str, api_key: str, api_base: str | None, model: str, messages: list, json_mode: bool = True) -> str:
+def _call_llm(provider: str, api_key: str, api_base: Optional[str], model: str, messages: list, json_mode: bool = True, timeout: Optional[int] = None, max_tokens: Optional[int] = None) -> str:
+    timeout = timeout or settings.llm_timeout_seconds
+    max_tokens = max_tokens or settings.llm_max_tokens
     if provider == "anthropic":
         import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=0)
         resp = client.messages.create(
-            model=model, max_tokens=8192,
+            model=model, max_tokens=max_tokens,
             system=messages[0]["content"],
             messages=[{"role": "user", "content": messages[1]["content"] + ("\n\n```json\n{" if json_mode else "")}],
         )
@@ -97,8 +171,8 @@ def _call_llm(provider: str, api_key: str, api_base: str | None, model: str, mes
         kwargs = {"api_key": api_key}
         if api_base:
             kwargs["base_url"] = api_base
-        client = openai.OpenAI(**kwargs)
-        create_kwargs: dict = {"model": model, "messages": messages, "timeout": 300, "max_tokens": 16384}
+        client = openai.OpenAI(**kwargs, timeout=timeout, max_retries=0)
+        create_kwargs: dict = {"model": model, "messages": messages, "max_tokens": max_tokens}
         if json_mode:
             create_kwargs["response_format"] = {"type": "json_object"}
         resp = client.chat.completions.create(**create_kwargs)

@@ -2,15 +2,62 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
+from datetime import datetime, timedelta, timezone
 from app.deps import get_db, get_current_user
 from app.models.ontology import OntologyProject
 from app.models.entity import Entity
 from app.models.relation import Relation
 from app.models.user import User
+from app.models.extraction_task import ExtractionTask
+from app.models.v2.mapping import OntologyMapping
 from app.schemas.ontology import OntologyCreate, OntologyOut, OntologyListItem, OntologyUpdate
 import uuid
 
 router = APIRouter()
+STALE_CREATING_AFTER = timedelta(minutes=10)
+
+
+def _as_utc(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _repair_stale_creating_status(project: OntologyProject, db: Session) -> bool:
+    if project.status != "creating":
+        return False
+
+    latest_task = (
+        db.query(ExtractionTask)
+        .filter(ExtractionTask.ontology_id == project.id)
+        .order_by(ExtractionTask.created_at.desc())
+        .first()
+    )
+    if latest_task and latest_task.status == "completed":
+        project.status = "created"
+        return True
+    if latest_task and latest_task.status == "failed":
+        project.status = "failed"
+        return True
+
+    updated_at = _as_utc(project.updated_at or project.created_at)
+    if updated_at and datetime.now(timezone.utc) - updated_at < STALE_CREATING_AFTER:
+        return False
+
+    entity_count = db.query(func.count(Entity.id)).filter(Entity.ontology_id == project.id).scalar() or 0
+    applied_mapping_count = (
+        db.query(func.count(OntologyMapping.id))
+        .filter(OntologyMapping.ontology_id == project.id, OntologyMapping.status == "applied")
+        .scalar()
+        or 0
+    )
+    if entity_count > 0 or applied_mapping_count > 0:
+        project.status = "created"
+    else:
+        project.status = "failed"
+    return True
 
 @router.get("")
 def list_ontologies(
@@ -23,12 +70,16 @@ def list_ontologies(
         q = q.filter(OntologyProject.name.ilike(f"%{name}%"))
     total = q.count()
     items = q.order_by(OntologyProject.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+    repaired = False
     result = []
     for item in items:
+        repaired = _repair_stale_creating_status(item, db) or repaired
         d = OntologyListItem.model_validate(item).model_dump()
         d['entity_count'] = db.query(func.count(Entity.id)).filter(Entity.ontology_id == item.id).scalar() or 0
         d['relation_count'] = db.query(func.count(Relation.id)).filter(Relation.ontology_id == item.id).scalar() or 0
         result.append(d)
+    if repaired:
+        db.commit()
     return {"data": {"items": result, "total": total, "page": page, "page_size": page_size}}
 
 @router.post("", status_code=201)
@@ -47,6 +98,9 @@ def get_ontology(ontology_id: str, db: Session = Depends(get_db), _=Depends(get_
     p = db.query(OntologyProject).filter(OntologyProject.id == ontology_id).first()
     if not p:
         raise HTTPException(404, "Not found")
+    if _repair_stale_creating_status(p, db):
+        db.commit()
+        db.refresh(p)
     return {"data": OntologyOut.model_validate(p).model_dump()}
 
 @router.put("/{ontology_id}")

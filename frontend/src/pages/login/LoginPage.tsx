@@ -33,8 +33,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm bg-white rounded-lg shadow p-8">
-        <h1 className="text-2xl font-semibold mb-2">OntoPrompt</h1>
-        <p className="text-gray-500 text-sm mb-6">本体知识工程平台</p>
+        <h1 className="text-2xl font-semibold mb-2">知识编织平台</h1>
+        <p className="text-gray-500 text-sm mb-6">知识建模与知识图谱平台</p>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{t('auth.username')}</label>

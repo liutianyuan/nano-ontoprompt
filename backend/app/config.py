@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     first_admin_password: str = "changeme123"
     uploads_dir: str = "./uploads"
     access_token_expire_minutes: int = 1440  # 24h
+    llm_timeout_seconds: int = 90
+    llm_max_timeout_seconds: int = 1800
+    llm_retry_count: int = 1
+    llm_max_tokens: int = 4096
+    extraction_stall_timeout_seconds: int = 600
 
     # 上传限制
     max_upload_mb: int = 200

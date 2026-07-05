@@ -44,6 +44,10 @@ export const ontologyApi = {
     apiClient.post<{ task_id: string }>(`/ontologies/${oid}/execute`, body),
   getExtractionStatus: (oid: string, task_id: string) =>
     apiClient.get(`/ontologies/${oid}/execute/status?task_id=${task_id}`),
+  getLatestExtraction: (oid: string) =>
+    apiClient.get(`/ontologies/${oid}/execute/latest`),
+  extractionStatusStreamUrl: (oid: string, task_id: string) =>
+    `/api/v1/ontologies/${oid}/execute/status/stream?task_id=${encodeURIComponent(task_id)}`,
 
   // Export
   exportUrl: (oid: string, format: string) => `/api/v1/ontologies/${oid}/export?format=${format}`,

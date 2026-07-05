@@ -155,9 +155,12 @@ def apply_mapping_from_dataset(ontology_id: str, mapping_id: str, db: Session = 
 def build_all_mappings(ontology_id: str, db: Session = Depends(get_db)):
     from app.services.v2.mapping.mapping_service import MappingService
     from app.models.v2.mapping import OntologyLinkMapping
+    from app.models.ontology import OntologyProject
     svc = MappingService(db)
     try:
         result = svc.build_all(ontology_id)
+        if result.get("error"):
+            raise HTTPException(400, detail=result["error"])
         active_links = db.query(OntologyLinkMapping).filter(
             OntologyLinkMapping.ontology_id == ontology_id,
             OntologyLinkMapping.status == "active",
@@ -169,7 +172,13 @@ def build_all_mappings(ontology_id: str, db: Session = Depends(get_db)):
         result["link_mappings_configured"] = active_links
         result["link_mappings_inferred"] = inferred_links
         return result
+    except HTTPException:
+        raise
     except Exception as e:
+        project = db.query(OntologyProject).filter(OntologyProject.id == ontology_id).first()
+        if project:
+            project.status = "failed"
+            db.commit()
         raise HTTPException(500, detail=str(e))
 
 

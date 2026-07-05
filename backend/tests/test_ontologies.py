@@ -1,3 +1,9 @@
+from datetime import datetime, timedelta, timezone
+
+from app.models.entity import Entity
+from app.models.ontology import OntologyProject
+
+
 def test_create_ontology(client, auth_headers):
     r = client.post("/api/v1/ontologies",
                     json={"name": "供应链测试", "domain": "供应链"},
@@ -43,3 +49,47 @@ def test_update_ontology(client, auth_headers):
     r2 = client.put(f"/api/v1/ontologies/{oid}", json={"description": "updated desc"}, headers=auth_headers)
     assert r2.status_code == 200
     assert r2.json()["data"]["description"] == "updated desc"
+
+
+def test_get_repairs_stale_creating_without_outputs_to_failed(client, auth_headers, db, admin_user):
+    ontology = OntologyProject(
+        name="StaleCreating",
+        domain="供应链",
+        status="creating",
+        build_mode="pipeline_mapping",
+        created_by=admin_user.id,
+        updated_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    db.add(ontology)
+    db.commit()
+
+    r = client.get(f"/api/v1/ontologies/{ontology.id}", headers=auth_headers)
+
+    assert r.status_code == 200
+    assert r.json()["data"]["status"] == "failed"
+
+
+def test_get_repairs_stale_creating_with_outputs_to_created(client, auth_headers, db, admin_user):
+    ontology = OntologyProject(
+        name="StaleCreated",
+        domain="供应链",
+        status="creating",
+        build_mode="pipeline_mapping",
+        created_by=admin_user.id,
+        updated_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    db.add(ontology)
+    db.flush()
+    db.add(Entity(
+        ontology_id=ontology.id,
+        name_cn="供应商A",
+        type="Supplier",
+        properties={},
+        confidence=0.9,
+    ))
+    db.commit()
+
+    r = client.get(f"/api/v1/ontologies/{ontology.id}", headers=auth_headers)
+
+    assert r.status_code == 200
+    assert r.json()["data"]["status"] == "created"

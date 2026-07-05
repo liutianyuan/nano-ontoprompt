@@ -13,8 +13,6 @@ INDEXES = [
     "CREATE INDEX entity_id IF NOT EXISTS FOR (n:Entity) ON (n.id)",
     # 按名称搜索（关键词查找）
     "CREATE INDEX entity_name_cn IF NOT EXISTS FOR (n:Entity) ON (n.name_cn)",
-    # 通用节点属性索引
-    "CREATE INDEX node_ontology_id IF NOT EXISTS FOR (n) ON (n.ontology_id)",
 ]
 
 # 约束定义（唯一性）

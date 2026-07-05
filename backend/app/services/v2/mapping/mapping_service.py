@@ -55,8 +55,18 @@ class MappingService:
 
     def build_all(self, ontology_id: str) -> dict:
         from app.services.v2.dataset_service import DatasetService
+        from app.models.ontology import OntologyProject
+
+        project = self._db.query(OntologyProject).filter(OntologyProject.id == ontology_id).first()
+        if not project:
+            raise ValueError(f"Ontology {ontology_id} not found")
+        project.status = "creating"
+        self._db.commit()
+
         mappings = self.get_mappings(ontology_id)
         if not mappings:
+            project.status = "failed"
+            self._db.commit()
             return {"error": "no mappings configured", "ontology_id": ontology_id}
 
         ds_svc = DatasetService(self._db)
@@ -128,6 +138,9 @@ class MappingService:
                 chroma_count = len(all_entities)
         except Exception as e:
             logger.warning(f"ChromaDB 写入失败（非致命）: {e}")
+
+        project.status = "created"
+        self._db.commit()
 
         return {
             "ontology_id": ontology_id,

@@ -394,7 +394,7 @@ export default function GraphTabV2({ ontologyId }: { ontologyId: string }) {
       ) : (
         <div className="border rounded-xl bg-gray-50 h-64 flex items-center justify-center">
           <p className="text-sm text-gray-400">
-            {graphSourceOk ? '该本体暂无图谱数据' : '启动 Neo4j 服务后图谱将在此显示'}
+            {graphSourceOk ? '该知识建模暂无图谱数据' : '启动 Neo4j 服务后图谱将在此显示'}
           </p>
         </div>
       )}

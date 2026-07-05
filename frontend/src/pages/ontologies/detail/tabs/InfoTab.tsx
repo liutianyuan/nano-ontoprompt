@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ontologyApi, promptApi, modelApi } from '@/api/ontologies'
@@ -83,7 +83,19 @@ const STAGE_PCT: Record<string, number> = {
   'validating output': 65, 'inferring relations': 75, 'saving results': 85, done: 100,
 }
 
+const STREAM_TIMEOUT_MS = 10 * 60 * 1000
 const lastTaskKey = (oid: string) => `ontoprompt_last_task_${oid}`
+const activeTaskKey = (oid: string) => `ontoprompt_active_task_${oid}`
+
+function uniquePromptOptions(prompts: any[] | undefined): any[] {
+  const seen = new Set<string>()
+  return (prompts || []).filter((p: any) => {
+    const key = `${p.name || ''}::${p.domain || ''}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 function PipelineMappingInfo({ ontology }: { ontology: OntologyDetail }) {
   const [mappings, setMappings] = useState<any[]>([])
@@ -102,7 +114,7 @@ function PipelineMappingInfo({ ontology }: { ontology: OntologyDetail }) {
         <span className="px-2 py-0.5 rounded text-xs bg-blue-50 border border-blue-200 text-blue-700">🔄 Pipeline 模式</span>
       </div>
       {mappings.length === 0 ? (
-        <p className="text-sm text-gray-400">暂无 Mapping 配置。请先在 Pipelines → Curated Datasets 中审批数据，然后在新建本体时配置 Mapping。</p>
+        <p className="text-sm text-gray-400">暂无 Mapping 配置。请先在 Pipelines → Curated Datasets 中审批数据，然后在新建知识建模时配置 Mapping。</p>
       ) : (
         <div className="space-y-2">
           {mappings.map((m: any) => (
@@ -138,6 +150,8 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
       return saved ? JSON.parse(saved) : null
     } catch { return null }
   })
+  const streamRef = useRef<AbortController | null>(null)
+  const streamTimeoutRef = useRef<number | null>(null)
 
   const { data: prompts } = useQuery({ queryKey: ['prompts'], queryFn: () => promptApi.list() as any })
   const { data: models } = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() as any })
@@ -156,38 +170,168 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
       }),
   })
 
-  const startPoll = (taskId: string) => {
-    let attempts = 0
-    const poll = async () => {
-      if (attempts++ > 90) return
-      try {
-        const status: any = await ontologyApi.getExtractionStatus(ontology.id, taskId)
-        setTaskStatus(status)
-        if (status.status === 'completed' || status.status === 'failed') {
-          try { localStorage.setItem(lastTaskKey(ontology.id), JSON.stringify(status)) } catch {}
+  const finishTaskStatus = (status: any) => {
+    setTaskStatus(status)
+    if (status.status === 'completed' || status.status === 'failed') {
+      try { localStorage.setItem(lastTaskKey(ontology.id), JSON.stringify(status)) } catch {}
+      qc.invalidateQueries({ queryKey: ['ontology', ontology.id] })
+      qc.invalidateQueries({ queryKey: ['stats'] })
+      qc.invalidateQueries({ queryKey: ['entities', ontology.id] })
+      qc.invalidateQueries({ queryKey: ['logic', ontology.id] })
+      qc.invalidateQueries({ queryKey: ['actions', ontology.id] })
+    }
+  }
+
+  const stopStatusStream = () => {
+    streamRef.current?.abort()
+    streamRef.current = null
+    if (streamTimeoutRef.current) {
+      window.clearTimeout(streamTimeoutRef.current)
+      streamTimeoutRef.current = null
+    }
+  }
+
+  const readStatusStream = async (response: Response, taskId: string, controller: AbortController) => {
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('Streaming response is not readable')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const chunk = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        const data = chunk
+          .split('\n')
+          .filter(line => line.startsWith('data:'))
+          .map(line => line.slice(5).trimStart())
+          .join('\n')
+        if (data) {
+          const status = JSON.parse(data)
+          finishTaskStatus(status)
+          if (status.status === 'completed' || status.status === 'failed') {
+            try { localStorage.removeItem(activeTaskKey(ontology.id)) } catch {}
+            stopStatusStream()
+            return
+          }
         }
-        if (status.status !== 'completed' && status.status !== 'failed') {
-          setTimeout(poll, 2000)
-        } else {
-          qc.invalidateQueries({ queryKey: ['ontology', ontology.id] })
-          qc.invalidateQueries({ queryKey: ['stats'] })
-          qc.invalidateQueries({ queryKey: ['entities', ontology.id] })
-          qc.invalidateQueries({ queryKey: ['logic', ontology.id] })
-          qc.invalidateQueries({ queryKey: ['actions', ontology.id] })
-        }
-      } catch {
-        setTimeout(poll, 3000)
+        boundary = buffer.indexOf('\n\n')
       }
     }
-    poll()
+
+    const current = localStorage.getItem(activeTaskKey(ontology.id))
+    if (!controller.signal.aborted && streamRef.current === controller && current === taskId) {
+      window.setTimeout(() => startStatusStream(taskId), 5000)
+    }
   }
+
+  const startStatusStream = (taskId: string) => {
+    stopStatusStream()
+    try { localStorage.setItem(activeTaskKey(ontology.id), taskId) } catch {}
+    const token = localStorage.getItem('token')
+    if (!token) {
+      finishTaskStatus({
+        status: 'failed',
+        progress: { stage: 'error', pct: 0 },
+        error: i18n.language.startsWith('zh') ? '登录状态已过期，请重新登录。' : 'Session expired. Please log in again.',
+      })
+      return
+    }
+
+    const controller = new AbortController()
+    streamRef.current = controller
+    streamTimeoutRef.current = window.setTimeout(() => {
+      if (streamRef.current === controller) {
+        stopStatusStream()
+        setTaskStatus((prev: any) => prev && prev.status !== 'completed' && prev.status !== 'failed'
+          ? {
+              ...prev,
+              status: 'failed',
+              error: i18n.language.startsWith('zh')
+                ? '等待 LLM 响应超时，请检查模型服务或稍后刷新状态。'
+                : 'Timed out waiting for the LLM response. Check the model service or refresh later.',
+            }
+          : prev)
+      }
+    }, STREAM_TIMEOUT_MS)
+
+    fetch(ontologyApi.extractionStatusStreamUrl(ontology.id, taskId), {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then(response => {
+        if (!response.ok) throw new Error(`Status stream failed (${response.status})`)
+        return readStatusStream(response, taskId, controller)
+      })
+      .catch(async e => {
+        if (controller.signal.aborted) return
+        stopStatusStream()
+        try {
+          const status: any = await ontologyApi.getExtractionStatus(ontology.id, taskId)
+          finishTaskStatus(status)
+          if (status.status !== 'completed' && status.status !== 'failed') {
+            window.setTimeout(() => startStatusStream(taskId), 5000)
+          }
+        } catch (fallbackError: any) {
+          finishTaskStatus({
+            status: 'failed',
+            progress: { stage: 'error', pct: 0 },
+            error: String(fallbackError?.detail || fallbackError?.message || e?.message || e),
+          })
+        }
+      })
+  }
+
+  useEffect(() => {
+    if (ontology.status === 'failed' && taskStatus && taskStatus.status !== 'completed' && taskStatus.status !== 'failed') {
+      try { localStorage.removeItem(activeTaskKey(ontology.id)) } catch {}
+      setTaskStatus({
+        ...taskStatus,
+        status: 'failed',
+        error: taskStatus.error || (i18n.language.startsWith('zh') ? '知识建模提取失败，请查看后端日志中的 LLM 错误。' : 'Ontology extraction failed. Check backend logs for the LLM error.'),
+      })
+    }
+  }, [ontology.status, taskStatus, i18n.language])
+
+  useEffect(() => {
+    let cancelled = false
+    const restoreTask = async () => {
+      const activeTaskId = localStorage.getItem(activeTaskKey(ontology.id))
+      if (activeTaskId && (!taskStatus || (taskStatus.status !== 'completed' && taskStatus.status !== 'failed'))) {
+        startStatusStream(activeTaskId)
+        return
+      }
+      if (!activeTaskId && !taskStatus) {
+        try {
+          const latest: any = await ontologyApi.getLatestExtraction(ontology.id)
+          if (cancelled || !latest) return
+          finishTaskStatus(latest)
+          if (latest.status !== 'completed' && latest.status !== 'failed') {
+            startStatusStream(latest.id)
+          }
+        } catch {}
+      }
+    }
+    restoreTask()
+    return () => { cancelled = true }
+  }, [ontology.id])
+
+  useEffect(() => () => {
+    stopStatusStream()
+  }, [])
 
   const handleExtract = async () => {
     setTaskStatus({ status: 'running', progress: { stage: 'queued', pct: 0 }, error: null } as any)
     const constraints = getActiveConstraints(loadRuleStates())
     try {
       const res: any = await extractMut.mutateAsync(constraints)
-      startPoll(res.task_id)
+      startStatusStream(res.task_id)
     } catch (e: any) {
       setTaskStatus({
         status: 'failed',
@@ -200,6 +344,7 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
   const selectedModel = (models as any[] | undefined)?.find((m: any) => m.id === modelId)
   const activeConstraints = getActiveConstraints(loadRuleStates())
   const fileList = files as any[]
+  const promptOptions = uniquePromptOptions(prompts as any[] | undefined)
   const isExtracting = taskStatus && taskStatus.status !== 'completed' && taskStatus.status !== 'failed'
   const currentPct = taskStatus?.progress?.pct ?? 0
   const currentStage = taskStatus?.progress?.stage ?? ''
@@ -251,7 +396,7 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
             <select value={promptId} onChange={e => setPromptId(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm">
               <option value="">{t('extract.select_prompt')}</option>
-              {(prompts as any[] || []).map((p: any) => (
+              {promptOptions.map((p: any) => (
                 <option key={p.id} value={p.id}>{p.name}（{p.domain}）</option>
               ))}
             </select>

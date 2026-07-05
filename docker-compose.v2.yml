@@ -58,7 +58,7 @@ services:
     ports: ["8001:8000"]
     volumes: [chroma_data:/chroma/chroma]
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('localhost', 8000), timeout=5); s.close()\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,6 +67,11 @@ services:
     build: ./backend
     ports: ["8000:8000"]
     env_file: .env
+    environment:
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      ORT_LOG_SEVERITY_LEVEL: 3
+      ANONYMIZED_TELEMETRY: "False"
     depends_on:
       db:
         condition: service_healthy
@@ -80,10 +85,20 @@ services:
         condition: service_healthy
     volumes: [./backend:/app, ./uploads:/uploads]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('localhost', 8000), timeout=5); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   celery_worker:
     build: ./backend
     env_file: .env
+    environment:
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      ORT_LOG_SEVERITY_LEVEL: 3
+      ANONYMIZED_TELEMETRY: "False"
     depends_on:
       db:
         condition: service_healthy
@@ -101,6 +116,11 @@ services:
   frontend:
     build: ./frontend
     ports: ["5173:5173"]
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
     volumes: [./frontend:/app, /app/node_modules]
     command: npm run dev -- --host
 

@@ -101,24 +101,16 @@ def test_model(model_id: str, db: Session = Depends(get_db), _=Depends(get_curre
             return {"data": {"ok": True, "response": f"Config type configured: {c.config_type}"}}
 
         from app.services.model_config_selector import llm_call_kwargs
+        from app.services.llm_service import test_llm_chat
         call_kwargs = llm_call_kwargs(c)
         if not call_kwargs:
             raise ValueError("Model config must include at least one model name")
-        api_key = call_kwargs["api_key"]
-        if c.provider == "anthropic":
-            import anthropic
-            client = anthropic.Anthropic(api_key=api_key)
-            model = call_kwargs["model"]
-            resp = client.messages.create(model=model, max_tokens=10, messages=[{"role": "user", "content": "ping"}])
-            return {"data": {"ok": True, "response": resp.content[0].text}}
-        else:
-            import openai
-            kwargs = {"api_key": api_key}
-            if call_kwargs["api_base"]:
-                kwargs["base_url"] = call_kwargs["api_base"]
-            client = openai.OpenAI(**kwargs)
-            model = call_kwargs["model"]
-            resp = client.chat.completions.create(model=model, messages=[{"role": "user", "content": "ping"}], max_tokens=10)
-            return {"data": {"ok": True, "response": resp.choices[0].message.content}}
+        response = test_llm_chat({
+            "provider": c.provider,
+            "api_key": call_kwargs["api_key"],
+            "api_base": call_kwargs["api_base"],
+            "options": c.options or {},
+        }, call_kwargs["model"])
+        return {"data": {"ok": True, "response": response}}
     except Exception as e:
         raise HTTPException(400, f"Connection failed: {e}")

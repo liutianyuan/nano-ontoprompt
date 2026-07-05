@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.deps import get_db, get_current_user
 from app.models.prompt import Prompt
+from app.models.extraction_task import ExtractionTask
 from app.models.user import User
 from app.models.model_config import ModelConfig
 from app.schemas.prompt import PromptCreate, PromptUpdate, PromptOut
@@ -266,6 +267,19 @@ def trigger_retention_review(context: dict) -> dict:
 }"""},
 ]
 
+
+def _dedupe_prompts(prompts: list[Prompt]) -> list[Prompt]:
+    """Keep the newest row for each visible prompt option."""
+    seen: set[tuple[str, str]] = set()
+    unique: list[Prompt] = []
+    for prompt in prompts:
+        key = ((prompt.name or "").strip(), (prompt.domain or "").strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(prompt)
+    return unique
+
 @router.get("/templates")
 def get_builtin_templates(_=Depends(get_current_user)):
     """Return hardcoded builtin prompt templates (not from DB)."""
@@ -277,7 +291,7 @@ def list_prompts(domain: Optional[str] = None, db: Session = Depends(get_db), _=
     if domain:
         q = q.filter(Prompt.domain == domain)
     prompts = q.order_by(Prompt.created_at.desc()).all()
-    return {"data": [PromptOut.model_validate(p).model_dump() for p in prompts]}
+    return {"data": [PromptOut.model_validate(p).model_dump() for p in _dedupe_prompts(prompts)]}
 
 @router.post("", status_code=201)
 def create_prompt(body: PromptCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -288,8 +302,8 @@ def create_prompt(body: PromptCreate, db: Session = Depends(get_db), current_use
 
 @router.get("/by-domain/{domain}")
 def get_prompts_by_domain(domain: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    prompts = db.query(Prompt).filter(Prompt.domain == domain).all()
-    return {"data": [PromptOut.model_validate(p).model_dump() for p in prompts]}
+    prompts = db.query(Prompt).filter(Prompt.domain == domain).order_by(Prompt.created_at.desc()).all()
+    return {"data": [PromptOut.model_validate(p).model_dump() for p in _dedupe_prompts(prompts)]}
 
 @router.get("/{prompt_id}")
 def get_prompt(prompt_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
@@ -313,6 +327,10 @@ def delete_prompt(prompt_id: str, db: Session = Depends(get_db), _=Depends(get_c
     p = db.query(Prompt).filter(Prompt.id == prompt_id).first()
     if not p:
         raise HTTPException(404, "Not found")
+    db.query(ExtractionTask).filter(ExtractionTask.prompt_id == prompt_id).update(
+        {ExtractionTask.prompt_id: None},
+        synchronize_session=False,
+    )
     db.delete(p); db.commit()
 
 @router.post("/generate-template")

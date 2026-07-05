@@ -7,10 +7,36 @@ v1 兼容：/api/v1/* 路由全部保留
 
 启动：uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
+import sys
+
+
+class _StreamNoiseFilter:
+    def __init__(self, wrapped):
+        self._wrapped = wrapped
+
+    def write(self, text):
+        ignored = (
+            "onnxruntime cpuid_info warning: Unknown CPU vendor",
+            "Failed to send telemetry event",
+        )
+        if any(pattern in text for pattern in ignored):
+            return len(text)
+        return self._wrapped.write(text)
+
+    def flush(self):
+        return self._wrapped.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+
+sys.stdout = _StreamNoiseFilter(sys.stdout)
+sys.stderr = _StreamNoiseFilter(sys.stderr)
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from app.database import engine, Base, SessionLocal
 from app.config import settings
@@ -24,6 +50,21 @@ from app.routers.v2 import curated as curated_v2
 from app.routers.v2 import mappings as mappings_v2
 from app.routers.v2 import incremental as incremental_v2
 from app.routers.v2 import logic_actions as logic_actions_v2
+
+def _ensure_column(conn, table_name: str, column_name: str, add_column_sql: str) -> None:
+    inspector = inspect(conn)
+    if not inspector.has_table(table_name):
+        return
+    columns = {col["name"] for col in inspector.get_columns(table_name)}
+    if column_name in columns:
+        return
+    try:
+        conn.execute(text(add_column_sql))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
 
 def _seed_db():
     from app.services.auth_service import seed_admin
@@ -39,26 +80,26 @@ def _seed_db():
         from app.models.v2.action import OntologyActionType, OntologyActionRun  # noqa: F401
         Base.metadata.create_all(bind=engine)
 
-        # SQLite column migrations — create_all skips existing tables
+        # Lightweight compatibility migrations for existing dev databases.
+        # Alembic remains the source of truth; these only cover older local DBs.
         with engine.connect() as conn:
-            for stmt in [
-                "ALTER TABLE extraction_tasks ADD COLUMN validation_report TEXT",
-                "ALTER TABLE model_configs ADD COLUMN config_type VARCHAR(30) DEFAULT 'llm'",
-                "ALTER TABLE model_configs ADD COLUMN options JSON DEFAULT '{}'",
-                "ALTER TABLE ontology_projects ADD COLUMN build_mode VARCHAR(30) DEFAULT 'simple_llm'",
-                "ALTER TABLE v2_pipelines ADD COLUMN domain VARCHAR(100) DEFAULT '通用'",
-                "ALTER TABLE v2_pipelines ADD COLUMN description TEXT DEFAULT ''",
-                "ALTER TABLE v2_pipelines ADD COLUMN definition JSON",
-                "ALTER TABLE v2_pipelines ADD COLUMN branch VARCHAR(50) DEFAULT 'main'",
-                "ALTER TABLE v2_pipelines ADD COLUMN version INTEGER DEFAULT 1",
-                "ALTER TABLE logic_rules ADD COLUMN enabled BOOLEAN DEFAULT 1",
-                "ALTER TABLE logic_rules ADD COLUMN status VARCHAR(20) DEFAULT 'draft'",
-                "ALTER TABLE actions ADD COLUMN enabled BOOLEAN DEFAULT 1",
-                "ALTER TABLE actions ADD COLUMN status VARCHAR(20) DEFAULT 'draft'",
+            for table_name, column_name, stmt in [
+                ("extraction_tasks", "validation_report", "ALTER TABLE extraction_tasks ADD COLUMN validation_report JSON"),
+                ("model_configs", "config_type", "ALTER TABLE model_configs ADD COLUMN config_type VARCHAR(30) DEFAULT 'llm'"),
+                ("model_configs", "options", "ALTER TABLE model_configs ADD COLUMN options JSON DEFAULT '{}'"),
+                ("ontology_projects", "build_mode", "ALTER TABLE ontology_projects ADD COLUMN build_mode VARCHAR(30) DEFAULT 'simple_llm'"),
+                ("v2_pipelines", "domain", "ALTER TABLE v2_pipelines ADD COLUMN domain VARCHAR(100) DEFAULT '通用'"),
+                ("v2_pipelines", "description", "ALTER TABLE v2_pipelines ADD COLUMN description TEXT DEFAULT ''"),
+                ("v2_pipelines", "definition", "ALTER TABLE v2_pipelines ADD COLUMN definition JSON"),
+                ("v2_pipelines", "branch", "ALTER TABLE v2_pipelines ADD COLUMN branch VARCHAR(50) DEFAULT 'main'"),
+                ("v2_pipelines", "version", "ALTER TABLE v2_pipelines ADD COLUMN version INTEGER DEFAULT 1"),
+                ("logic_rules", "enabled", "ALTER TABLE logic_rules ADD COLUMN enabled BOOLEAN DEFAULT 1"),
+                ("logic_rules", "status", "ALTER TABLE logic_rules ADD COLUMN status VARCHAR(20) DEFAULT 'draft'"),
+                ("actions", "enabled", "ALTER TABLE actions ADD COLUMN enabled BOOLEAN DEFAULT 1"),
+                ("actions", "status", "ALTER TABLE actions ADD COLUMN status VARCHAR(20) DEFAULT 'draft'"),
             ]:
                 try:
-                    conn.execute(text(stmt))
-                    conn.commit()
+                    _ensure_column(conn, table_name, column_name, stmt)
                 except Exception:
                     pass  # column already exists or sqlite limitation
 
@@ -83,15 +124,30 @@ def _seed_db():
 
         # Seed / update builtin prompts (upsert by name)
         from app.models.prompt import Prompt
+        from app.models.extraction_task import ExtractionTask
         from app.models.user import User
         from app.routers.prompts import BUILTIN_PROMPTS
         admin = db.query(User).filter(User.role == "admin").first()
         if admin:
             for p in BUILTIN_PROMPTS:
-                existing = db.query(Prompt).filter(Prompt.name == p["name"]).first()
+                existing_rows = (
+                    db.query(Prompt)
+                    .filter(Prompt.name == p["name"], Prompt.domain == p["domain"])
+                    .order_by(Prompt.created_at.desc())
+                    .all()
+                )
+                existing = existing_rows[0] if existing_rows else None
                 if existing:
                     existing.content = p["content"]
                     existing.domain = p["domain"]
+                    for duplicate in existing_rows[1:]:
+                        db.query(ExtractionTask).filter(
+                            ExtractionTask.prompt_id == duplicate.id
+                        ).update(
+                            {ExtractionTask.prompt_id: existing.id},
+                            synchronize_session=False,
+                        )
+                        db.delete(duplicate)
                 else:
                     db.add(Prompt(id=str(uuid.uuid4()), name=p["name"], domain=p["domain"],
                                   content=p["content"], version="v1.0", created_by=admin.id))

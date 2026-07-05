@@ -39,6 +39,12 @@ def get_graph(ontology_id: str, limit: int = 200, label_filter: str | None = Non
         return _sqlite_graph_data(ontology_id, limit=limit, label_filter=label_filter)
     data["neo4j_available"] = True
     svc.close()
+    if not data.get("nodes"):
+        fallback = _sqlite_graph_data(ontology_id, limit=limit, label_filter=label_filter)
+        if fallback.get("nodes"):
+            fallback["neo4j_available"] = True
+            fallback["fallback"] = "sqlite_empty_neo4j"
+            return fallback
     return data
 
 

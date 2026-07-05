@@ -108,6 +108,8 @@ def test_supply_chain_mapping_golden_prd_242_semantics(db, admin_user):
          patch("app.services.v2.vector.chroma_service.ChromaService.upsert_entities", return_value=None):
         result = service.build_all(ontology.id)
 
+    db.refresh(ontology)
+    assert ontology.status == "created"
     assert result["total_entities"] == sum(len(rows) for rows in rows_by_dataset.values())
     assert result["total_relations"] >= 5
     assert result["total_logic"] >= 1
@@ -130,3 +132,21 @@ def test_supply_chain_mapping_golden_prd_242_semantics(db, admin_user):
     action_categories = {row[0] for row in db.query(OntologyActionType.action_category).filter(OntologyActionType.ontology_id == ontology.id).distinct().all()}
     assert {"crud", "state_transition", "link", "review", "repair", "writeback"} <= action_categories
     assert db.query(Action).filter(Action.ontology_id == ontology.id).count() >= len(action_categories)
+
+
+def test_build_all_without_mappings_marks_ontology_failed(db, admin_user):
+    ontology = OntologyProject(
+        name="空映射状态测试",
+        domain="供应链",
+        build_mode="pipeline_mapping",
+        created_by=admin_user.id,
+    )
+    db.add(ontology)
+    db.commit()
+    db.refresh(ontology)
+
+    result = MappingService(db).build_all(ontology.id)
+
+    db.refresh(ontology)
+    assert result["error"] == "no mappings configured"
+    assert ontology.status == "failed"

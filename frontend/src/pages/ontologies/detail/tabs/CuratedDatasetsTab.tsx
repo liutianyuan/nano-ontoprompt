@@ -299,7 +299,7 @@ export default function CuratedDatasetsTab({ ontologyId }: { ontologyId: string 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">
-          关联已审批的 Curated Dataset，配置字段映射后即可构建本体实体。
+          关联已审批的 Curated Dataset，配置字段映射后即可构建知识建模实体。
         </p>
         <button
           onClick={() => setShowLink(v => !v)}

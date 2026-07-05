@@ -9,8 +9,10 @@ logger = logging.getLogger(__name__)
 
 try:
     import chromadb
+    from chromadb.config import Settings as ChromaSettings
 except ImportError:
     chromadb = None
+    ChromaSettings = None
 
 # 连接失败后多少秒内不再重试 (heartbeat 超时会阻塞每个请求数秒)
 _RETRY_INTERVAL = 60.0
@@ -47,7 +49,8 @@ class ChromaService:
         try:
             if chromadb is None:
                 raise ImportError("chromadb not installed")
-            client = chromadb.HttpClient(host=self._host, port=self._port)
+            settings = ChromaSettings(anonymized_telemetry=False) if ChromaSettings else None
+            client = chromadb.HttpClient(host=self._host, port=self._port, settings=settings)
             client.heartbeat()
             self._client = client
             self._available = True
@@ -55,7 +58,7 @@ class ChromaService:
                 cls._shared_client = client
             logger.info("ChromaDB connected")
         except Exception as e:
-            logger.warning(f"ChromaDB unavailable: {e}")
+            logger.debug("ChromaDB unavailable: %s", e)
             self._available = False
             if self._is_default:
                 cls._shared_unavailable_until = time.monotonic() + _RETRY_INTERVAL

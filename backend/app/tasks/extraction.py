@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from celery import Celery
 from app.config import settings
 
@@ -96,6 +98,144 @@ def _richness(obj) -> int:
     return score
 
 
+def _set_ontology_status(db, ontology_id: str, status: str) -> None:
+    from app.models.ontology import OntologyProject
+
+    project = db.query(OntologyProject).filter(OntologyProject.id == ontology_id).first()
+    if project:
+        project.status = status
+
+
+def _fail_task(db, task, error: str) -> None:
+    task.status = "failed"
+    task.error = error
+    _set_ontology_status(db, task.ontology_id, "failed")
+    db.commit()
+
+
+def _friendly_error(exc: Exception) -> str:
+    message = str(exc)
+    if "Request timed out" in message or "APITimeoutError" in message:
+        return (
+            f"{message}\n\n"
+            "模型服务 /chat/completions 响应超时。网络到 API Base 是通的，但推理请求没有及时返回；"
+            "请检查模型服务是否已加载完成、队列是否拥堵、API Key 是否可用于 chat/completions，"
+            "或在模型 options 中调大 timeout / 调小 max_tokens。"
+        )
+    return message
+
+
+def _rule_based_fallback(text: str, reason: str) -> dict:
+    import re
+
+    candidates: list[str] = []
+    for line in text.splitlines():
+        line = line.strip().strip("|").strip()
+        if not line or set(line) <= {"-", "|", " "}:
+            continue
+        line = re.sub(r"^#{1,6}\s*", "", line)
+        line = re.sub(r"^\*+\s*", "", line)
+        line = re.sub(r"^\d+(?:\.\d+)*[、.\s]+", "", line)
+        parts = [p.strip(" *`：:") for p in re.split(r"\s*\|\s*|[；;]", line) if p.strip(" *`：:")]
+        for part in parts:
+            if 2 <= len(part) <= 40 and not part.isdigit() and part not in {"---"}:
+                candidates.append(part)
+
+    seen = set()
+    entities = []
+    for name in candidates:
+        if name in seen:
+            continue
+        seen.add(name)
+        entities.append({
+            "name_cn": name,
+            "name_en": None,
+            "type": "Concept",
+            "description": "由规则兜底从文档文本中提取，建议人工复核。",
+            "properties": {"source": "rule_fallback"},
+            "confidence": 0.45,
+        })
+        if len(entities) >= 30:
+            break
+
+    if not entities:
+        entities = [{
+            "name_cn": "文档概念",
+            "name_en": "DocumentConcept",
+            "type": "Concept",
+            "description": "LLM 不可用且规则未识别出明确实体，请人工补充。",
+            "properties": {"source": "rule_fallback"},
+            "confidence": 0.3,
+        }]
+
+    return {
+        "entities": entities,
+        "relations": [],
+        "logic_rules": [],
+        "actions": [],
+        "_fallback": {"method": "rule_based", "reason": reason},
+    }
+
+
+def _abort_if_terminal(db, task_id: str) -> bool:
+    from app.models.extraction_task import ExtractionTask
+
+    task = db.get(ExtractionTask, task_id, populate_existing=True)
+    return bool(task and task.status in {"completed", "failed"})
+
+
+def _sync_graph_stores(db, ontology_id: str, Entity, Relation) -> None:
+    entities = db.query(Entity).filter(Entity.ontology_id == ontology_id).all()
+    if not entities:
+        return
+
+    payloads = []
+    for e in entities:
+        payloads.append({
+            **(e.properties or {}),
+            "id": e.id,
+            "source_id": e.id,
+            "ontology_id": ontology_id,
+            "name_cn": e.name_cn or "",
+            "name": e.name_cn or e.name_en or e.id,
+            "name_en": e.name_en or "",
+            "type": e.type or "",
+            "description": e.description or "",
+            "confidence": e.confidence or 1.0,
+            "version": e.version or "v0.1",
+        })
+
+    try:
+        from app.services.v2.graph.neo4j_service import Neo4jService
+        neo = Neo4jService()
+        if neo.available:
+            neo.delete_by_ontology(ontology_id)
+            neo.batch_upsert_entities("OntologyEntity", payloads, key_field="id")
+            for r in db.query(Relation).filter(Relation.ontology_id == ontology_id).all():
+                rel_type = (r.type or "RELATED").upper().replace(" ", "_").replace("-", "_")
+                neo.upsert_relation(
+                    "OntologyEntity", r.source_entity,
+                    "OntologyEntity", r.target_entity,
+                    rel_type,
+                    props={
+                        **(r.properties or {}),
+                        "ontology_id": ontology_id,
+                        "confidence": r.confidence or 1.0,
+                    },
+                )
+            neo.close()
+    except Exception:
+        pass
+
+    try:
+        from app.services.v2.vector.chroma_service import ChromaService
+        chroma = ChromaService()
+        if chroma.available:
+            chroma.upsert_entities(ontology_id, payloads)
+    except Exception:
+        pass
+
+
 def _fuzzy_resolve_entity(name: str, name_to_id: dict) -> str | None:
     """Resolve entity name to ID, falling back to substring-containment match.
 
@@ -130,6 +270,7 @@ def run_extraction(self, task_id: str):
     from app.models.action import Action
     from app.models.relation import Relation
     from app.models.ontology import OntologyProject
+    from app.models.user import User  # noqa: F401 - register users table for FK resolution in Celery
     from app.services.llm_service import extract_ontology, infer_relations
     from app.services.encryption_service import decrypt
     import uuid
@@ -146,11 +287,21 @@ def run_extraction(self, task_id: str):
 
         files = db.query(UploadedFile).filter(UploadedFile.ontology_id == task.ontology_id).all()
         if not files:
-            task.status = "failed"; task.error = "No files uploaded"; db.commit(); return
+            _fail_task(db, task, "No files uploaded")
+            return
 
-        combined_text = "\n\n---\n\n".join(f.converted_md or "" for f in files if f.converted_md)
+        text_files = [f for f in files if (f.converted_md or "").strip()]
+        combined_text = "\n\n---\n\n".join(f.converted_md or "" for f in text_files)
         if not combined_text.strip():
-            task.status = "failed"; task.error = "No text content found in files"; db.commit(); return
+            filenames = ", ".join(f.filename for f in files[:5])
+            more = f" 等 {len(files)} 个文件" if len(files) > 5 else ""
+            _fail_task(
+                db,
+                task,
+                f"No text content found in uploaded files ({filenames}{more}). "
+                "Use files with selectable text, or run OCR/VLM conversion for scanned PDFs/images before extraction.",
+            )
+            return
 
         # Strip control characters and normalise whitespace so the LLM doesn't
         # embed raw bytes that would later break its own JSON output.
@@ -160,7 +311,8 @@ def run_extraction(self, task_id: str):
         model_cfg = db.query(ModelConfig).filter(ModelConfig.id == task.model_id).first()
         prompt    = db.query(Prompt).filter(Prompt.id == task.prompt_id).first()
         if not model_cfg or not prompt:
-            task.status = "failed"; task.error = "Model or prompt not found"; db.commit(); return
+            _fail_task(db, task, "Model or prompt not found")
+            return
 
         task.progress = {"stage": "calling LLM", "pct": 40}
         db.commit()
@@ -170,6 +322,7 @@ def run_extraction(self, task_id: str):
             "provider": model_cfg.provider,
             "api_key":  decrypt(model_cfg.api_key_encrypted or ""),
             "api_base": model_cfg.api_base,
+            "options": model_cfg.options or {},
         }
 
         prompt_content = prompt.content
@@ -178,7 +331,14 @@ def run_extraction(self, task_id: str):
             prompt_content += "\n\n" + "\n".join(constraints)
 
         # ── Pass 1: main extraction ──────────────────────────────────────────
-        result = extract_ontology(combined_text, prompt_content, config_dict, model_name)
+        fallback_warning = None
+        try:
+            result = extract_ontology(combined_text, prompt_content, config_dict, model_name)
+        except Exception as e:
+            fallback_warning = _friendly_error(e)
+            result = _rule_based_fallback(combined_text, fallback_warning)
+        if _abort_if_terminal(db, task_id):
+            return
 
         # ── Fix 5: calibrate confidence before validation ────────────────────
         result = _calibrate_confidence(result)
@@ -190,11 +350,19 @@ def run_extraction(self, task_id: str):
         from app.engine.post_harness.validator import PostHarnessValidator
         validator = PostHarnessValidator()
         v_report  = validator.validate(result)
+        if fallback_warning:
+            from app.engine.post_harness.validator import Severity
+            v_report.add(
+                Severity.WARNING,
+                "LLM_FALLBACK_USED",
+                f"LLM 调用失败，已使用规则兜底生成基础实体。原因：{fallback_warning}",
+            )
         task.validation_report = v_report.to_dict()
         db.commit()
 
         if v_report.has_fatal():
-            task.status = "failed"; task.error = v_report.to_summary(); db.commit(); return
+            _fail_task(db, task, v_report.to_summary())
+            return
 
         # ── Fix 1: second-pass relation inference ─────────────────────────────
         entities_extracted  = result.get("entities", [])
@@ -216,13 +384,15 @@ def run_extraction(self, task_id: str):
         # Trigger when globally sparse OR >30% of entities are isolated
         sparse = relation_count < max(5, entity_count * 0.4)
         many_isolated = isolated_count > max(2, entity_count * 0.3)
-        if entity_count >= 5 and (sparse or many_isolated):
+        if entity_count >= 5 and (sparse or many_isolated) and not fallback_warning:
             task.progress = {"stage": "inferring relations", "pct": 75}
             db.commit()
             extra_rels = infer_relations(
                 entities_extracted, relations_extracted,
                 combined_text, config_dict, model_name
             )
+            if _abort_if_terminal(db, task_id):
+                return
             if extra_rels:
                 # Accept relations where both endpoints fuzzy-match a known entity name
                 for r in extra_rels:
@@ -420,6 +590,13 @@ def run_extraction(self, task_id: str):
                 db.add(act)
                 existing_action_map[name_cn] = act
 
+        if _abort_if_terminal(db, task_id):
+            return
+
+        task.progress = {"stage": "syncing graph stores", "pct": 95}
+        db.commit()
+        _sync_graph_stores(db, task.ontology_id, Entity, Relation)
+
         project = db.query(OntologyProject).filter(OntologyProject.id == task.ontology_id).first()
         if project:
             project.status = "created"
@@ -429,10 +606,12 @@ def run_extraction(self, task_id: str):
         db.commit()
 
     except Exception as e:
+        db.rollback()
         task = db.query(ExtractionTask).filter(ExtractionTask.id == task_id).first()
         if task:
             task.status = "failed"
-            task.error  = str(e)
+            task.error  = _friendly_error(e)
+            _set_ontology_status(db, task.ontology_id, "failed")
             db.commit()
     finally:
         db.close()

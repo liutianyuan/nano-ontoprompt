@@ -117,7 +117,7 @@ export default function CuratedTab() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-lg font-semibold">Curated 数据集</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Pipeline 输出的清洗后数据，可预览、审核、映射到本体</p>
+          <p className="text-xs text-gray-400 mt-0.5">Pipeline 输出的清洗后数据，可预览、审核、映射到知识建模</p>
         </div>
         <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{datasets.length} 个数据集</span>
       </div>

@@ -141,7 +141,7 @@ export default function OntologyCreateWizard() {
         <button onClick={() => navigate('/ontologies')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-black mb-6">
           <ArrowLeft size={14} /> {t('ontology.back')}
         </button>
-        <h2 className="text-xl font-semibold mb-2">新建本体</h2>
+        <h2 className="text-xl font-semibold mb-2">新建知识建模</h2>
         <p className="text-sm text-gray-500 mb-8">选择构建方式</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
           <button onClick={() => { setMode('simple_llm'); setStep('fill_info') }}
@@ -160,7 +160,7 @@ export default function OntologyCreateWizard() {
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center"><GitBranch size={20} className="text-blue-600" /></div>
               <span className="font-semibold">Pipeline Mapping</span>
             </div>
-            <p className="text-sm text-gray-600 mb-4">从已审批的 Curated Datasets 映射生成本体。</p>
+            <p className="text-sm text-gray-600 mb-4">从已审批的 Curated Datasets 映射生成知识模型。</p>
             <ul className="text-xs text-gray-500 space-y-1"><li>✓ 结构化/半结构化数据</li><li>✓ 精细化建模</li><li>✓ 企业级大规模数据</li></ul>
             <div className="mt-4 flex items-center gap-1 text-sm font-medium text-black">选择此方式 <ArrowRight size={14} /></div>
           </button>
@@ -175,7 +175,7 @@ export default function OntologyCreateWizard() {
         <button onClick={() => setStep('select_mode')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-black mb-6">
           <ArrowLeft size={14} /> 返回选择方式
         </button>
-        <h2 className="text-xl font-semibold mb-1">新建本体</h2>
+        <h2 className="text-xl font-semibold mb-1">新建知识建模</h2>
         <p className="text-sm text-gray-400 mb-2">{mode === 'simple_llm' ? '⚡ 简易 LLM 提取' : '🔄 Pipeline Mapping'}</p>
         {mode === 'pipeline_mapping' && (
           <div className="flex gap-2 mb-6 text-xs">
@@ -190,17 +190,17 @@ export default function OntologyCreateWizard() {
         )}
         <div className="bg-white rounded-xl border p-6 space-y-4">
           <div><label className="block text-xs font-medium text-gray-600 mb-1">名称 *</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="本体名称" className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="知识建模名称" className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
           <div><label className="block text-xs font-medium text-gray-600 mb-1">领域 *</label>
             <select value={domain} onChange={e => setDomain(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">{DOMAINS.map(d => <option key={d}>{d}</option>)}</select></div>
           <div><label className="block text-xs font-medium text-gray-600 mb-1">描述（可选）</label>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} placeholder="简要描述本体用途" className="w-full border rounded-lg px-3 py-2 text-sm resize-none" /></div>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} placeholder="简要描述知识建模用途" className="w-full border rounded-lg px-3 py-2 text-sm resize-none" /></div>
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep('select_mode')} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">上一步</button>
             <button onClick={() => createMut.mutate()} disabled={!name || createMut.isPending}
               className="px-5 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-40 flex items-center gap-2">
-              {createMut.isPending && <Loader2 size={14} className="animate-spin" />}{mode === 'pipeline_mapping' ? '下一步' : '创建本体'}
+              {createMut.isPending && <Loader2 size={14} className="animate-spin" />}{mode === 'pipeline_mapping' ? '下一步' : '创建知识建模'}
             </button>
           </div>
         </div>
@@ -374,7 +374,7 @@ export default function OntologyCreateWizard() {
         {buildError && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-xs text-red-600">{buildError}</p>
-            <button onClick={() => navigate(`/ontologies/${createdOntologyId}?tab=info`)} className="text-xs text-blue-600 hover:underline mt-2">查看本体</button>
+            <button onClick={() => navigate(`/ontologies/${createdOntologyId}?tab=info`)} className="text-xs text-blue-600 hover:underline mt-2">查看知识建模</button>
           </div>
         )}
         {readyForReview && (

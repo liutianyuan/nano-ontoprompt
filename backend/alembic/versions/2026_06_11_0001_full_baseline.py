@@ -145,7 +145,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['model_id'], ['model_configs.id'], ),
     sa.ForeignKeyConstraint(['ontology_id'], ['ontology_projects.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['prompt_id'], ['prompts.id'], ),
+    sa.ForeignKeyConstraint(['prompt_id'], ['prompts.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('logic_rules',
