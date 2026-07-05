@@ -8,12 +8,12 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 
-await page.route('http://localhost:10080/api/**', async route => {
-  const url = route.request().url().replace('http://localhost:10080', 'http://localhost:8000');
+await page.route('http://localhost:10081/api/**', async route => {
+  const url = route.request().url().replace('http://localhost:10081', 'http://localhost:8000');
   try { const r = await route.fetch({ url }); await route.fulfill({ response: r }); } catch { await route.continue(); }
 });
 
-await page.goto('http://localhost:10080/login');
+await page.goto('http://localhost:10081/login');
 await page.waitForLoadState('networkidle');
 await page.fill('input[placeholder="用户名"]', 'admin');
 await page.fill('input[placeholder="密码"]', 'admin123');
@@ -25,7 +25,7 @@ const errorOverlay = page.locator('vite-error-overlay');
 const hasError = await errorOverlay.isVisible({ timeout: 1000 }).catch(() => false);
 console.log('Has Vite error overlay:', hasError);
 
-await page.goto('http://localhost:10080/ontologies');
+await page.goto('http://localhost:10081/ontologies');
 await page.waitForLoadState('networkidle');
 await new Promise(r => setTimeout(r, 2000));
 

@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test'
 import { mkdirSync } from 'fs'
 import path from 'path'
 
-const BASE = 'http://localhost:10080'
+const BASE = 'http://localhost:10081'
 const GRAPH_OID = '9da664ff-ead9-408c-9963-d54e77260dc9'
 const SS_DIR = 'human_demo_screenshots'
 mkdirSync(SS_DIR, { recursive: true })

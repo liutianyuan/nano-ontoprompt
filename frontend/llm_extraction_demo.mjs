@@ -19,7 +19,7 @@ import { mkdirSync, rmSync } from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 
-const BASE   = 'http://localhost:10080'
+const BASE   = 'http://localhost:10081'
 const SS_DIR = 'llm_extraction_screenshots'
 try { rmSync(SS_DIR, { recursive: true }) } catch {}
 mkdirSync(SS_DIR, { recursive: true })

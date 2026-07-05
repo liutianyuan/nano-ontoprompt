@@ -1,7 +1,7 @@
 {
   "testTime": "2026-06-06T01:23:39.087Z",
   "backend": "http://localhost:8000",
-  "frontend": "http://localhost:10080",
+  "frontend": "http://localhost:10081",
   "pages": [
     {
       "page": "Overview",

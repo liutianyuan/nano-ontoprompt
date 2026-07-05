@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BASE  = 'http://localhost:10080';
+const BASE  = 'http://localhost:10081';
 const API   = 'http://localhost:8002/api/v1';
 const SSDIR = path.join(__dirname, 'screenshots_domains');
 const DOCS  = path.join(__dirname, '../test_data/documents');

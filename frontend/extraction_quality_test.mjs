@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BASE = 'http://localhost:10080';
+const BASE = 'http://localhost:10081';
 const API = 'http://localhost:8002/api/v1';
 const SSDIR = path.join(__dirname, 'screenshots_quality');
 const DOCS = path.join(__dirname, '../test_data/documents');

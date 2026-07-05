@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 from playwright.sync_api import sync_playwright
 
-BASE = "http://localhost:10080"
+BASE = "http://localhost:10081"
 API = "http://localhost:8000"
 SHOTS = Path(__file__).parent / "screenshots" / "eval_acceptance"
 SHOTS.mkdir(parents=True, exist_ok=True)

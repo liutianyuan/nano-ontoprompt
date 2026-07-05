@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 
-const BASE_URL = 'http://localhost:10080';
+const BASE_URL = 'http://localhost:10081';
 const API_URL = 'http://localhost:8000';
 const SCREENSHOT_DIR = './domain_test_screenshots';
 const RESULTS_FILE = './domain_test_results.json';

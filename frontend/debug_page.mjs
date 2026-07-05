@@ -9,7 +9,7 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 const page = await ctx.newPage();
 
 // 登录
-await page.goto('http://localhost:10080/login');
+await page.goto('http://localhost:10081/login');
 await page.waitForLoadState('networkidle');
 await page.fill('input[type="text"], input[placeholder*="用户"], input[placeholder*="user"]', 'admin');
 await page.fill('input[type="password"]', 'admin123');
@@ -18,7 +18,7 @@ await new Promise(r => setTimeout(r, 3000));
 
 console.log('Current URL after login:', page.url());
 
-await page.goto('http://localhost:10080/ontologies');
+await page.goto('http://localhost:10081/ontologies');
 await page.waitForLoadState('networkidle');
 await new Promise(r => setTimeout(r, 2000));
 

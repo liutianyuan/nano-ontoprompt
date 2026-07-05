@@ -170,7 +170,7 @@ app = FastAPI(title="OntoPrompt API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:10080", "http://127.0.0.1:10080"],
+    allow_origins=["http://localhost:10081", "http://127.0.0.1:10081"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

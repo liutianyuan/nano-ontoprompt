@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const BASE = 'http://localhost:10080'
+const BASE = 'http://localhost:10081'
 const API = 'http://localhost:8000'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)

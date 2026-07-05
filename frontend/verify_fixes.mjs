@@ -7,7 +7,7 @@
  */
 import { chromium } from 'playwright';
 
-const BASE = 'http://localhost:10080';
+const BASE = 'http://localhost:10081';
 const API  = 'http://localhost:8002/api/v1';
 const OID  = '75d5e5f7-c101-49a6-a2ed-91642d6a0dcc';  // HR domain
 

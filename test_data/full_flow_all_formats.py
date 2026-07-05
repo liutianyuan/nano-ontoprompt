@@ -10,7 +10,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE_API = "http://localhost:8000"
-BASE_UI  = "http://localhost:10080"
+BASE_UI  = "http://localhost:10081"
 SS_DIR   = Path(__file__).parent / "screenshots" / "full_flow"
 SS_DIR.mkdir(parents=True, exist_ok=True)
 SUPPLY_DIR = Path(__file__).parent / "供应链"

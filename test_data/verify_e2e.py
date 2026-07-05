@@ -153,4 +153,4 @@ if oid:
 
     ok = len(ents)>0 and len(logic)>0 and len(acts)>0 and len(g.get("nodes",[]))>0
     print(f'\n  {"ALL PASSED ✅" if ok else "SOME FAILED ❌"}')
-    print(f'  URL: http://localhost:10080/ontologies/{oid}')
+    print(f'  URL: http://localhost:10081/ontologies/{oid}')

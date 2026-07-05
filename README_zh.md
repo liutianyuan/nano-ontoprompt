@@ -81,7 +81,7 @@ docker compose -f docker-compose.v2.yml up --build
 
 将启动 PostgreSQL、Redis、Neo4j、MinIO、ChromaDB、后端与前端。轻量 v1 栈可改用 `docker-compose.yml`。
 
-打开 [http://localhost:10080](http://localhost:10080),默认账号 `admin / changeme123`。
+打开 [http://localhost:10081](http://localhost:10081),默认账号 `admin / changeme123`。
 
 ### 方式二 — 手动启动(最小化,无需外部服务)
 

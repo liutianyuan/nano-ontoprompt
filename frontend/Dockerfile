@@ -3,5 +3,5 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install
 COPY . .
-EXPOSE 10080
+EXPOSE 10081
 CMD ["npm", "run", "dev", "--", "--host"]

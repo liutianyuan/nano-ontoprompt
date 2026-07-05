@@ -20,13 +20,13 @@ await ctx.addInitScript(t => {
   localStorage.setItem('token', t);
   localStorage.setItem('lang', 'zh');
 }, token);
-await ctx.route('http://localhost:10080/api/**', async route => {
-  const url = route.request().url().replace('http://localhost:10080', 'http://localhost:8000');
+await ctx.route('http://localhost:10081/api/**', async route => {
+  const url = route.request().url().replace('http://localhost:10081', 'http://localhost:8000');
   try { const r = await route.fetch({ url }); await route.fulfill({ response: r }); } catch { await route.continue(); }
 });
 const page = await ctx.newPage();
 
-await page.goto('http://localhost:10080/ontologies/new');
+await page.goto('http://localhost:10081/ontologies/new');
 await page.waitForLoadState('networkidle');
 await new Promise(r => setTimeout(r, 2000));
 
