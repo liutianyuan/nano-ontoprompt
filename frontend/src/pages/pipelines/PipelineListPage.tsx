@@ -59,33 +59,34 @@ export default function PipelineListPage() {
   })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Pipeline 列表</h2>
-          <p className="text-xs text-gray-400 mt-0.5">管理数据管道，从数据接入到输出 Curated Dataset</p>
+          <p className="page-kicker">Pipeline registry</p>
+          <h2 className="mt-1 text-xl font-semibold text-[#10201D]">Pipeline 列表</h2>
+          <p className="page-subtitle mt-1">管理数据管道，从数据接入到输出 Curated Dataset</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-sm rounded-lg hover:bg-gray-800"
+          className="medical-primary flex h-10 items-center gap-1.5 px-4 text-sm"
         >
           <Plus size={14} /> 新建 Pipeline
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 items-center">
+      <div className="medical-panel flex flex-wrap items-center gap-3 p-4">
         <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8AA39E]" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="搜索名称 / ID..."
-            className="w-full pl-8 pr-3 py-1.5 border rounded-lg text-sm"
+            className="medical-input w-full px-3 py-2 pl-8 text-sm"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black">
+            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8AA39E] hover:text-[#10201D]">
               <X size={12} />
             </button>
           )}
@@ -93,7 +94,7 @@ export default function PipelineListPage() {
         <select
           value={filterDomain}
           onChange={e => setFilterDomain(e.target.value)}
-          className="border rounded-lg px-3 py-1.5 text-sm"
+          className="medical-input px-3 py-2 text-sm"
         >
           <option value="">全部领域</option>
           {domains.map(d => <option key={d} value={d}>{d}</option>)}
@@ -101,73 +102,73 @@ export default function PipelineListPage() {
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          className="border rounded-lg px-3 py-1.5 text-sm"
+          className="medical-input px-3 py-2 text-sm"
         >
           <option value="">全部状态</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
-        <button onClick={load} className="text-xs text-gray-500 hover:text-black px-2 py-1">重置</button>
+        <button onClick={load} className="medical-secondary h-10 px-3 text-sm">重置</button>
       </div>
 
       {/* List */}
       {loading ? (
-        <div className="text-gray-400 text-sm p-8 text-center">加载中...</div>
+        <div className="p-8 text-center text-sm text-[#6C8580]">加载中...</div>
       ) : filtered.length === 0 ? (
-        <div className="border-2 border-dashed rounded-xl p-12 text-center text-gray-400 space-y-2">
-          <GitBranch size={32} className="mx-auto opacity-30" />
-          <p className="text-sm font-medium">{search || filterDomain ? '没有匹配的 Pipeline' : '暂无 Pipeline'}</p>
-          <p className="text-xs">点击「新建 Pipeline」创建数据管道</p>
+        <div className="medical-panel border-dashed p-12 text-center text-[#6C8580]">
+          <GitBranch size={32} className="mx-auto text-[#8AA39E]" />
+          <p className="mt-3 text-sm font-medium">{search || filterDomain ? '没有匹配的 Pipeline' : '暂无 Pipeline'}</p>
+          <p className="mt-1 text-xs">点击「新建 Pipeline」创建数据管道</p>
         </div>
       ) : (
-        <div className="border rounded-xl overflow-hidden">
+        <div className="medical-panel overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="border-b border-[#E2EFEC]">
               <tr>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 text-xs">ID</th>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 text-xs">名称</th>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 text-xs">领域</th>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 text-xs">状态</th>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 text-xs">版本</th>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 text-xs">分支</th>
-                <th className="text-right px-4 py-2.5 font-medium text-gray-600 text-xs">操作</th>
+                <th className="px-4 py-3 text-left">ID</th>
+                <th className="px-4 py-3 text-left">名称</th>
+                <th className="px-4 py-3 text-left">领域</th>
+                <th className="px-4 py-3 text-left">状态</th>
+                <th className="px-4 py-3 text-left">版本</th>
+                <th className="px-4 py-3 text-left">分支</th>
+                <th className="px-4 py-3 text-right">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-[#E2EFEC]">
               {filtered.map(pl => (
-                <tr key={pl.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-400 hover:text-black" title={pl.id}>
+                <tr key={pl.id}>
+                  <td className="px-4 py-3 font-mono text-xs text-[#8AA39E]" title={pl.id}>
                     {pl.id.slice(0, 8)}
                   </td>
-                  <td className="px-4 py-3 font-medium">{pl.name}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{pl.domain || '通用'}</td>
+                  <td className="px-4 py-3 font-semibold text-[#10201D]">{pl.name}</td>
+                  <td className="px-4 py-3 text-xs text-[#55726D]">{pl.domain || '通用'}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-1.5 py-0.5 rounded border ${STATUS_STYLE[pl.status] || STATUS_STYLE.draft}`}>
                       {STATUS_LABEL[pl.status] || pl.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">v{pl.version || 1}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 font-mono">{pl.branch || 'main'}</td>
+                  <td className="px-4 py-3 text-xs text-[#55726D]">v{pl.version || 1}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[#55726D]">{pl.branch || 'main'}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex gap-1 justify-end">
                       <button
                         onClick={() => navigate(`/pipelines/${pl.id}`)}
-                        className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-black transition-colors"
+                        className="rounded p-1.5 text-[#55726D] transition-colors hover:bg-[#EFF8F6] hover:text-[#0F766E]"
                         title="编辑"
                       >
                         <ExternalLink size={14} />
                       </button>
                       <button
                         onClick={() => pipelinesApi.runSync(pl.id).then(load)}
-                        className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-black transition-colors"
+                        className="rounded p-1.5 text-[#55726D] transition-colors hover:bg-[#EFF8F6] hover:text-[#0F766E]"
                         title="运行"
                       >
                         <Play size={14} />
                       </button>
                       <button
                         onClick={() => handleDelete(pl)}
-                        className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                        className="rounded p-1.5 text-[#8AA39E] transition-colors hover:bg-red-50 hover:text-red-500"
                         title="删除"
                       >
                         <Trash2 size={14} />
@@ -229,11 +230,11 @@ function PipelineCreateModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-[#10201D]/55 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-lg p-6 w-[420px]" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold">新建 Pipeline</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-black">
+          <button onClick={onClose} className="text-gray-400 hover:text-[#10201D]">
             <X size={16} />
           </button>
         </div>
@@ -281,7 +282,7 @@ function PipelineCreateModal({
           <button
             onClick={handleCreate}
             disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 medical-primary rounded-lg text-sm disabled:opacity-50"
           >
             {saving && <Loader2 size={13} className="animate-spin" />}
             {saving ? '创建中...' : '创建'}

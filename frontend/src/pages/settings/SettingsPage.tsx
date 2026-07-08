@@ -158,15 +158,19 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-6">{t('settings.title')}</h2>
+    <div className="space-y-5">
+      <section className="medical-panel-strong p-6">
+        <p className="page-kicker">Governance console</p>
+        <h2 className="page-title mt-2">{t('settings.title')}</h2>
+        <p className="page-subtitle mt-2">集中管理置信度阈值、抽取约束、用户权限和提示词模板。</p>
+      </section>
 
-      <div className="border-b mb-6">
-        <div className="flex gap-1">
+      <div className="medical-panel px-3 pt-2">
+        <div className="flex gap-1 overflow-x-auto">
           {tabs.map(tab => (
             <button key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === tab.key ? 'border-black' : 'border-transparent text-gray-500'}`}>
+              className={`h-11 shrink-0 border-b-2 px-4 text-sm font-medium transition-colors ${activeTab === tab.key ? 'border-[#0F766E] text-[#0F766E]' : 'border-transparent text-[#6C8580] hover:text-[#10201D]'}`}>
               {tab.label}
             </button>
           ))}
@@ -195,7 +199,7 @@ export default function SettingsPage() {
             ))}
             <div className="pt-2 flex justify-end">
               <button onClick={() => updateMut.mutate()} disabled={updateMut.isPending}
-                className="px-4 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-50">
+                className="px-4 py-2 medical-primary rounded-lg text-sm disabled:opacity-50">
                 {t('settings.save')}
               </button>
             </div>
@@ -235,7 +239,7 @@ export default function SettingsPage() {
                     </div>
                     <button
                       onClick={() => updateExtractRule(rule.id, { enabled: !state.enabled })}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${state.enabled ? 'bg-black' : 'bg-gray-200'}`}>
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${state.enabled ? ' bg-[#0F766E]' : 'bg-gray-200'}`}>
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${state.enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
                     </button>
                   </div>
@@ -259,7 +263,7 @@ export default function SettingsPage() {
                     </div>
                     <button
                       onClick={() => toggleValidationRule(rule.id)}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${enabled ? 'bg-black' : 'bg-gray-200'}`}>
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${enabled ? ' bg-[#0F766E]' : 'bg-gray-200'}`}>
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
                     </button>
                   </div>
@@ -276,7 +280,7 @@ export default function SettingsPage() {
             <p className="text-sm text-gray-500">管理提示词模版，用于知识图谱抽取</p>
             <button
               onClick={() => { setShowCreatePrompt(v => !v); setPromptMsg('') }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-lg text-sm">
+              className="flex items-center gap-1.5 px-3 py-1.5 medical-primary rounded-lg text-sm">
               <Plus size={14} /> 新建提示词
             </button>
           </div>
@@ -342,7 +346,7 @@ export default function SettingsPage() {
                     type="button"
                     disabled={createPromptMut.isPending || !promptName.trim() || !promptContent.trim()}
                     onClick={() => createPromptMut.mutate({ name: promptName.trim(), domain: promptDomain, content: promptContent.trim(), version: '1.0' })}
-                    className="px-3 py-1.5 bg-black text-white rounded-lg text-sm disabled:opacity-50">
+                    className="px-3 py-1.5 medical-primary rounded-lg text-sm disabled:opacity-50">
                     {createPromptMut.isPending ? '保存中...' : '确认保存'}
                   </button>
                 </div>
@@ -390,7 +394,7 @@ export default function SettingsPage() {
             <p className="text-sm text-gray-500">{t('settings.users_desc')}</p>
             <button
               onClick={() => { setShowCreateUser(v => !v); setUserMsg('') }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-lg text-sm">
+              className="flex items-center gap-1.5 px-3 py-1.5 medical-primary rounded-lg text-sm">
               <Plus size={14} /> {t('settings.new_user')}
             </button>
           </div>
@@ -417,7 +421,7 @@ export default function SettingsPage() {
                   <button type="button" onClick={() => setShowCreateUser(false)}
                     className="px-3 py-1.5 border rounded-lg text-sm">{t('common.cancel')}</button>
                   <button type="submit" disabled={createUserMut.isPending}
-                    className="px-3 py-1.5 bg-black text-white rounded-lg text-sm disabled:opacity-50">
+                    className="px-3 py-1.5 medical-primary rounded-lg text-sm disabled:opacity-50">
                     {createUserMut.isPending ? t('settings.creating') : t('settings.confirm_create')}
                   </button>
                 </div>
@@ -474,7 +478,7 @@ export default function SettingsPage() {
                               <X size={13} /> {t('common.cancel')}
                             </button>
                             <button type="submit" disabled={updateUserMut.isPending}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-black text-white rounded text-sm disabled:opacity-50">
+                              className="flex items-center gap-1 px-3 py-1.5 medical-primary rounded text-sm disabled:opacity-50">
                               <Check size={13} /> {t('common.save')}
                             </button>
                           </div>
@@ -486,7 +490,7 @@ export default function SettingsPage() {
                       <td className="px-4 py-3 font-medium">{u.username}</td>
                       <td className="px-4 py-3 text-gray-500">{u.email || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'medical-primary' : 'bg-gray-100 text-gray-600'}`}>
                           {u.role === 'admin' ? t('settings.role_admin') : t('settings.role_user')}
                         </span>
                       </td>
@@ -496,7 +500,7 @@ export default function SettingsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <button onClick={() => startEditUser(u)}
-                            className="text-gray-500 hover:text-black">
+                            className="text-gray-500 hover:text-[#10201D]">
                             <Pencil size={14} />
                           </button>
                           <button onClick={() => {

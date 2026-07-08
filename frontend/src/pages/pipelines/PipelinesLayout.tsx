@@ -1,9 +1,9 @@
-import { Outlet, useLocation} from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
+import { Database } from 'lucide-react'
 
 export default function PipelinesLayout() {
   const location = useLocation()
 
-  // Builder 页面使用全屏布局，不显示标题
   const isBuilder = /^\/pipelines\/(?!connections|datasets|transforms|curated$)[a-f0-9-]+$/i.test(location.pathname)
 
   if (isBuilder) {
@@ -11,8 +11,19 @@ export default function PipelinesLayout() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">数据管道</h1>
+    <div className="space-y-5">
+      <section className="medical-panel-strong p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-11 w-11 items-center justify-center rounded-md border border-[#B9DCD6] bg-white/70 text-[#0F766E]">
+            <Database size={22} />
+          </span>
+          <div>
+            <p className="page-kicker">Data circulation</p>
+            <h1 className="page-title mt-2">数据管道</h1>
+            <p className="page-subtitle mt-2">从连接、数据集、转换到 Curated Dataset 的全链路工作台。</p>
+          </div>
+        </div>
+      </section>
       <Outlet />
     </div>
   )

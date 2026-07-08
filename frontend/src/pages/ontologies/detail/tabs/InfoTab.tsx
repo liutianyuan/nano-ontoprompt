@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ontologyApi, promptApi, modelApi } from '@/api/ontologies'
-import { CheckCircle, XCircle, Loader2, ChevronRight, AlertTriangle, AlertCircle, Info } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, ChevronRight, AlertTriangle, AlertCircle, Info, Activity, ClipboardCheck, Database, FileText, ShieldCheck, Stethoscope } from 'lucide-react'
 import type { OntologyDetail } from '@/types/ontology'
 import { loadRuleStates, getActiveConstraints } from '@/utils/extractionRules'
 
@@ -108,30 +108,55 @@ function PipelineMappingInfo({ ontology }: { ontology: OntologyDetail }) {
   }, [ontology.id])
 
   return (
-    <div className="bg-white rounded-xl border p-6 space-y-4">
+    <div className="rounded-lg border border-[#CFE7E2] bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold">Pipeline Mapping 状态</span>
-        <span className="px-2 py-0.5 rounded text-xs bg-blue-50 border border-blue-200 text-blue-700">🔄 Pipeline 模式</span>
+        <Database size={16} className="text-[#0F766E]" />
+        <span className="text-sm font-semibold text-[#10201D]">Pipeline Mapping 状态</span>
+        <span className="ml-auto rounded border border-[#CFE7E2] bg-[#EFF8F6] px-2 py-0.5 text-xs text-[#0F766E]">Pipeline 模式</span>
       </div>
       {mappings.length === 0 ? (
-        <p className="text-sm text-gray-400">暂无 Mapping 配置。请先在 Pipelines → Curated Datasets 中审批数据，然后在新建知识建模时配置 Mapping。</p>
+        <p className="mt-4 text-sm text-[#6C8580]">暂无 Mapping 配置。请先在 Pipelines → Curated Datasets 中审批数据，然后在新建知识建模时配置 Mapping。</p>
       ) : (
-        <div className="space-y-2">
+        <div className="mt-4 space-y-2">
           {mappings.map((m: any) => (
-            <div key={m.mapping_id || m.id} className="border rounded-lg px-3 py-2 text-sm flex items-center justify-between">
+            <div key={m.mapping_id || m.id} className="flex items-center justify-between rounded-md border border-[#E2EFEC] px-3 py-2 text-sm">
               <div>
-                <span className="font-medium">{m.entity_class}</span>
-                {m.entity_class_cn && <span className="text-gray-400 ml-2">({m.entity_class_cn})</span>}
+                <span className="font-medium text-[#10201D]">{m.entity_class}</span>
+                {m.entity_class_cn && <span className="ml-2 text-[#6C8580]">({m.entity_class_cn})</span>}
               </div>
-              <span className={`text-xs px-1.5 py-0.5 rounded border ${m.status === 'active' ? 'border-green-200 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500'}`}>
+              <span className={`rounded border px-1.5 py-0.5 text-xs ${m.status === 'active' ? 'border-[#B9DCD6] bg-[#EFF8F6] text-[#0F766E]' : 'border-gray-200 text-gray-500'}`}>
                 {m.status || 'draft'}
               </span>
             </div>
           ))}
         </div>
       )}
-      <div className="pt-2 border-t flex gap-2">
-        <a href="/pipelines/curated" className="text-xs text-blue-600 hover:underline">→ 查看 Curated Datasets</a>
+      <div className="mt-4 flex gap-2 border-t border-[#E2EFEC] pt-3">
+        <a href="/pipelines/curated" className="text-xs font-medium text-[#0F766E] hover:underline">查看 Curated Datasets</a>
+      </div>
+    </div>
+  )
+}
+
+function InfoMetric({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'green' | 'amber' }) {
+  const toneClass = tone === 'green' ? 'text-[#0F766E]' : tone === 'amber' ? 'text-[#B7791F]' : 'text-[#10201D]'
+  return (
+    <div className="rounded-md border border-[#D9ECE8] bg-white/80 px-3 py-2">
+      <p className="text-[11px] text-[#6C8580]">{label}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${toneClass}`}>{value}</p>
+    </div>
+  )
+}
+
+function SectionHeading({ icon: Icon, eyebrow, title }: { icon: any; eyebrow: string; title: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md border border-[#B9DCD6] bg-[#EFF8F6] text-[#0F766E]">
+        <Icon size={17} />
+      </span>
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6C8580]">{eyebrow}</p>
+        <h3 className="text-base font-semibold text-[#10201D]">{title}</h3>
       </div>
     </div>
   )
@@ -350,101 +375,99 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
   const currentStage = taskStatus?.progress?.stage ?? ''
 
   const isPipelineMode = ontology.build_mode === 'pipeline_mapping'
+  const isMedical = ontology.domain === '医疗'
+  const buildModeLabel = isPipelineMode ? 'Pipeline Mapping' : '简易 LLM 提取'
+  const statusLabel = ontology.status === 'created' ? '已入库' : ontology.status === 'creating' ? '建模中' : ontology.status
 
   return (
-    <div className="space-y-5">
-      {/* Basic Info */}
-      <div className="bg-white rounded-xl border p-6">
-        <h3 className="font-semibold mb-4">{t('ontology.tabs.info')}</h3>
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <div><dt className="text-xs text-gray-500 mb-0.5">{t('ontology.name')}</dt><dd className="font-medium">{ontology.name}</dd></div>
-          <div><dt className="text-xs text-gray-500 mb-0.5">{t('ontology.domain')}</dt><dd>{ontology.domain}</dd></div>
-          <div><dt className="text-xs text-gray-500 mb-0.5">{t('ontology.version')}</dt><dd className="font-mono">{ontology.version}</dd></div>
-          <div><dt className="text-xs text-gray-500 mb-0.5">{t('ontology.status')}</dt><dd>{ontology.status}</dd></div>
-          <div>
-            <dt className="text-xs text-gray-500 mb-0.5">构建方式</dt>
-            <dd>
-              {isPipelineMode
-                ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-50 border border-blue-200 text-blue-700">🔄 Pipeline Mapping</span>
-                : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-50 border border-amber-200 text-amber-700">⚡ 简易 LLM 提取</span>
-              }
-            </dd>
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="space-y-5">
+        <div className="rounded-lg border border-[#B9DCD6] bg-[#F8FCFB] p-5 shadow-sm">
+          <SectionHeading icon={Stethoscope} eyebrow={isMedical ? 'Clinical record' : 'Model record'} title={isMedical ? '临床知识模型档案' : t('ontology.tabs.info')} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <InfoMetric label={t('ontology.name')} value={ontology.name} />
+            <InfoMetric label={isMedical ? '临床专科域' : t('ontology.domain')} value={ontology.domain} tone={isMedical ? 'green' : 'default'} />
+            <InfoMetric label={t('ontology.version')} value={ontology.version} />
+            <InfoMetric label={t('ontology.status')} value={statusLabel} tone={ontology.status === 'failed' ? 'amber' : 'green'} />
           </div>
-          {ontology.description && (
-            <div className="col-span-2"><dt className="text-xs text-gray-500 mb-0.5">{t('ontology.desc_optional')}</dt><dd className="text-gray-700">{ontology.description}</dd></div>
-          )}
-        </dl>
-      </div>
-
-      {/* Pipeline Mapping 状态（仅 pipeline_mapping 模式显示） */}
-      {isPipelineMode && <PipelineMappingInfo ontology={ontology} />}
-
-      {/* LLM Config（仅简易模式显示） */}
-      {!isPipelineMode && <div className="bg-white rounded-xl border p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="font-semibold">{t('extract.llm_config')}</h3>
-          {activeConstraints.length > 0 && (
-            <span className="ml-auto text-xs bg-amber-50 border border-amber-200 text-amber-700 px-2 py-0.5 rounded-full">
-              {t('extract.constraints_active', { count: activeConstraints.length })}
-            </span>
-          )}
+          <div className="mt-4 rounded-md border border-[#D9ECE8] bg-white/75 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6C8580]">
+              {isMedical ? 'Scope of care' : t('ontology.desc_optional')}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[#334B47]">
+              {ontology.description || (isMedical
+                ? '覆盖疾病、症状、药物、诊疗流程、禁忌规则与执行动作的结构化知识沉淀。'
+                : '暂无描述。')}
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">{t('extract.prompt_label')}</label>
-            <select value={promptId} onChange={e => setPromptId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm">
-              <option value="">{t('extract.select_prompt')}</option>
-              {promptOptions.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}（{p.domain}）</option>
-              ))}
-            </select>
+        {isPipelineMode && <PipelineMappingInfo ontology={ontology} />}
+
+        {!isPipelineMode && <div className="rounded-lg border border-[#CFE7E2] bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <SectionHeading icon={ClipboardCheck} eyebrow="Extraction order" title={isMedical ? '临床知识提取医嘱' : t('extract.llm_config')} />
+            {activeConstraints.length > 0 && (
+              <span className="mb-4 ml-auto rounded-full border border-[#F1D49B] bg-[#FFF8E8] px-2.5 py-1 text-xs font-medium text-[#B7791F]">
+                {t('extract.constraints_active', { count: activeConstraints.length })}
+              </span>
+            )}
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">{t('extract.model_label')}</label>
-            <select value={modelId} onChange={e => { setModelId(e.target.value); setModelName('') }}
-              className="w-full border rounded-lg px-3 py-2 text-sm">
-              <option value="">{t('extract.select_model')}</option>
-              {(models as any[] || []).map((m: any) => (
-                <option key={m.id} value={m.id}>{m.name}（{m.provider}）</option>
-              ))}
-            </select>
-          </div>
-
-          {selectedModel && (
+          <div className="grid gap-3 lg:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('extract.model_specific')}</label>
+              <label className="mb-1 block text-xs font-medium text-[#55726D]">{t('extract.prompt_label')}</label>
+              <select value={promptId} onChange={e => setPromptId(e.target.value)}
+                className="h-10 w-full rounded-md border border-[#CFE7E2] bg-[#F8FCFB] px-3 text-sm text-[#10201D] outline-none transition focus:border-[#0F766E] focus:ring-2 focus:ring-[#B9DCD6]">
+                <option value="">{t('extract.select_prompt')}</option>
+                {promptOptions.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}（{p.domain}）</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[#55726D]">{t('extract.model_label')}</label>
+              <select value={modelId} onChange={e => { setModelId(e.target.value); setModelName('') }}
+                className="h-10 w-full rounded-md border border-[#CFE7E2] bg-[#F8FCFB] px-3 text-sm text-[#10201D] outline-none transition focus:border-[#0F766E] focus:ring-2 focus:ring-[#B9DCD6]">
+                <option value="">{t('extract.select_model')}</option>
+                {(models as any[] || []).map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.name}（{m.provider}）</option>
+                ))}
+              </select>
+            </div>
+
+            {selectedModel && (
+            <div className="lg:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-[#55726D]">{t('extract.model_specific')}</label>
               <select value={modelName} onChange={e => setModelName(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm">
+                className="h-10 w-full rounded-md border border-[#CFE7E2] bg-[#F8FCFB] px-3 text-sm text-[#10201D] outline-none transition focus:border-[#0F766E] focus:ring-2 focus:ring-[#B9DCD6]">
                 <option value="">{t('extract.select')}</option>
                 {(selectedModel.models || []).map((m: string) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
             </div>
-          )}
+            )}
 
-          <div className="pt-1 flex items-center gap-3">
+          <div className="flex items-center gap-3 pt-1 lg:col-span-2">
             <button
               onClick={handleExtract}
               disabled={!promptId || !modelId || !modelName || extractMut.isPending || isExtracting || fileList.length === 0}
-              className="px-5 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-40 flex items-center gap-2">
+              className="flex h-10 items-center gap-2 rounded-md bg-[#0F766E] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0B5F58] disabled:opacity-40">
               {isExtracting && <Loader2 size={14} className="animate-spin" />}
               {isExtracting ? t('extract.extracting') : t('extract.start')}
             </button>
             {fileList.length === 0 && (
-              <span className="text-xs text-gray-400">{t('extract.need_files')}</span>
+              <span className="text-xs text-[#B7791F]">{t('extract.need_files')}</span>
             )}
           </div>
-        </div>
-      </div>}
+          </div>
+        </div>}
 
-      {/* Extraction Progress */}
-      {!isPipelineMode && taskStatus && (
-        <div className={`bg-white rounded-xl border p-6 ${taskStatus.status === 'failed' ? 'border-red-200 bg-red-50' : ''}`}>
-          <h3 className="font-semibold mb-4">{t('extract.progress')}</h3>
+        {!isPipelineMode && taskStatus && (
+        <div className={`rounded-lg border p-5 shadow-sm ${taskStatus.status === 'failed' ? 'border-red-200 bg-red-50' : 'border-[#CFE7E2] bg-white'}`}>
+          <SectionHeading icon={Activity} eyebrow="Care pathway" title={isMedical ? '临床抽取轨迹' : t('extract.progress')} />
 
           {taskStatus.status === 'failed' ? (
             <div className="flex items-start gap-2 text-red-600">
@@ -467,17 +490,17 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
                       <div className="flex flex-col items-center gap-1">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
                           passed
-                            ? done ? 'bg-green-500 text-white' : 'bg-black text-white'
-                            : 'bg-gray-100 text-gray-400'
+                            ? done ? 'bg-[#0F766E] text-white' : 'bg-[#2563EB] text-white'
+                            : 'bg-[#EFF8F6] text-[#8AA39E]'
                         }`}>
                           {passed && done ? <CheckCircle size={14} /> : i + 1}
                         </div>
-                        <span className={`text-xs whitespace-nowrap ${passed ? 'text-gray-700' : 'text-gray-400'}`}>
+                        <span className={`whitespace-nowrap text-xs ${passed ? 'text-[#334B47]' : 'text-[#8AA39E]'}`}>
                           {t(stage.i18nKey)}
                         </span>
                       </div>
                       {i < STAGE_KEYS.length - 1 && (
-                        <ChevronRight size={14} className="text-gray-300 mx-2 flex-shrink-0 mb-4" />
+                        <ChevronRight size={14} className="mx-2 mb-4 flex-shrink-0 text-[#B9DCD6]" />
                       )}
                     </div>
                   )
@@ -485,38 +508,83 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
               </div>
 
               {/* Progress bar */}
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
+              <div className="h-2 w-full rounded-full bg-[#E2EFEC]">
                 <div
-                  className={`h-1.5 rounded-full transition-all duration-700 ${
-                    taskStatus.status === 'completed' ? 'bg-green-500' : 'bg-black'
+                  className={`h-2 rounded-full transition-all duration-700 ${
+                    taskStatus.status === 'completed' ? 'bg-[#0F766E]' : 'bg-[#2563EB]'
                   }`}
                   style={{ width: `${currentPct}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1.5">{currentPct}%{currentStage ? ` · ${currentStage}` : ''}</p>
+              <p className="mt-1.5 text-xs text-[#6C8580]">{currentPct}%{currentStage ? ` · ${currentStage}` : ''}</p>
             </>
           )}
         </div>
-      )}
+        )}
 
-      {/* Validation Report */}
-      {!isPipelineMode && taskStatus?.validation_report && (
-        <ValidationReportCard report={taskStatus.validation_report} />
-      )}
+        {!isPipelineMode && taskStatus?.validation_report && (
+          <ValidationReportCard report={taskStatus.validation_report} />
+        )}
+      </div>
 
-      {/* Export */}
-      <div className="bg-white rounded-xl border p-6">
-        <h3 className="font-semibold mb-4">{t('extract.export')}</h3>
-        <div className="flex gap-2 flex-wrap">
+      <aside className="space-y-5">
+        <div className="rounded-lg border border-[#B9DCD6] bg-[#10201D] p-5 text-white shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10">
+              <Activity size={18} />
+            </span>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-[#9FD4CD]">Model vitals</p>
+              <h3 className="text-base font-semibold">知识模型生命体征</h3>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-md border border-white/[0.15] bg-white/[0.08] p-3">
+              <p className="text-[11px] text-[#9FD4CD]">资料数</p>
+              <p className="mt-1 text-2xl font-semibold">{fileList.length}</p>
+            </div>
+            <div className="rounded-md border border-white/[0.15] bg-white/[0.08] p-3">
+              <p className="text-[11px] text-[#9FD4CD]">约束</p>
+              <p className="mt-1 text-2xl font-semibold">{activeConstraints.length}</p>
+            </div>
+            <div className="col-span-2 rounded-md border border-white/[0.15] bg-white/[0.08] p-3">
+              <p className="text-[11px] text-[#9FD4CD]">构建方式</p>
+              <p className="mt-1 text-sm font-semibold">{buildModeLabel}</p>
+            </div>
+          </div>
+          <div className="mt-5 h-12 text-[#9FD4CD]">
+            <svg viewBox="0 0 360 54" fill="none" className="h-full w-full">
+              <path d="M0 30 H62 L75 30 L88 9 L104 47 L119 30 H162 L176 30 L187 21 L205 39 L220 30 H360" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M0 48 H360" stroke="currentColor" strokeWidth="1" strokeDasharray="3 9" opacity=".35" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[#CFE7E2] bg-white p-5 shadow-sm">
+          <SectionHeading icon={ShieldCheck} eyebrow="Handoff" title={t('extract.export')} />
+          <div className="flex flex-wrap gap-2">
           {['json', 'yaml', 'csv', 'ttl', 'html'].map(fmt => (
             <a key={fmt} href={ontologyApi.exportUrl(ontology.id, fmt)}
-              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 font-mono text-gray-700"
+              className="rounded-md border border-[#CFE7E2] bg-[#F8FCFB] px-3 py-1.5 font-mono text-sm text-[#334B47] transition hover:border-[#0F766E] hover:text-[#0F766E]"
               download>
               {fmt.toUpperCase()}
             </a>
           ))}
+          </div>
         </div>
-      </div>
+
+        <div className="rounded-lg border border-[#D9ECE8] bg-white/80 p-5">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#10201D]">
+            <FileText size={16} className="text-[#0F766E]" />
+            建模审阅提示
+          </div>
+          <p className="text-sm leading-6 text-[#55726D]">
+            {isMedical
+              ? '建议先确认疾病、药物、症状和诊疗流程的命名一致性，再进入图谱与规则审阅。'
+              : '建议先确认实体命名与资料来源，再进入图谱和规则审阅。'}
+          </p>
+        </div>
+      </aside>
     </div>
   )
 }

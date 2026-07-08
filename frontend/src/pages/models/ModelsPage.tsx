@@ -129,48 +129,54 @@ export default function ModelsPage() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">{t('model.title')}</h2>
+    <div className="space-y-5">
+      <section className="medical-panel-strong p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="page-kicker">Model services</p>
+            <h2 className="page-title mt-2">{t('model.title')}</h2>
+            <p className="page-subtitle mt-2">管理 LLM、OCR 和外部推理服务，供知识抽取、映射和图谱问答调用。</p>
+          </div>
         <button onClick={() => { setShowCreate(true); reset({ config_type: 'llm', provider: 'openai', ocr_enabled: 'false', ocr_lang: 'ch', ocr_device: 'cpu' }); setFormTags([]) }}
-          className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg text-sm">
+          className="medical-primary flex h-10 items-center gap-2 px-4 text-sm">
           <Plus size={14} /> {t('model.create')}
         </button>
-      </div>
+        </div>
+      </section>
 
       <div className="grid gap-4">
-        {isLoading ? <p className="text-gray-400 text-sm">{t('common.loading')}</p> :
+        {isLoading ? <p className="text-sm text-[#6C8580]">{t('common.loading')}</p> :
           (models as ModelConfig[]).map(m => (
-            <div key={m.id} className="bg-white border rounded-lg p-4">
+            <div key={m.id} className="medical-panel p-5">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-semibold">{m.name}</h3>
-                  <p className="text-sm text-gray-500">{typeLabel(m.config_type)} · {m.provider}{m.api_base ? ` · ${m.api_base}` : ''}</p>
+                  <h3 className="font-semibold text-[#10201D]">{m.name}</h3>
+                  <p className="mt-1 text-sm text-[#55726D]">{typeLabel(m.config_type)} · {m.provider}{m.api_base ? ` · ${m.api_base}` : ''}</p>
                   {m.models?.length > 0 && (
-                    <div className="flex gap-1 mt-2 flex-wrap">
-                      {m.models.map(mn => <span key={mn} className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded">{mn}</span>)}
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {m.models.map(mn => <span key={mn} className="rounded border border-[#D9ECE8] bg-[#F8FCFB] px-2 py-0.5 text-xs text-[#334B47]">{mn}</span>)}
                     </div>
                   )}
                   {((m.options?.usage_tags as string[]) || []).length > 0 && (
-                    <div className="flex gap-1 flex-wrap mt-1">
+                    <div className="mt-2 flex flex-wrap gap-1">
                       {((m.options?.usage_tags as string[]) || []).map((tag: string) => (
-                        <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{tag}</span>
+                        <span key={tag} className="rounded-full bg-[#EFF8F6] px-2 py-0.5 text-xs text-[#0F766E]">{tag}</span>
                       ))}
                     </div>
                   )}
                   {testResult[m.id] && <p className={`text-xs mt-1 ${testResult[m.id].startsWith('连接成功') ? 'text-green-600' : 'text-amber-600'}`}>{testResult[m.id]}</p>}
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button onClick={() => testMut.mutate(m.id)} disabled={testMut.isPending} className="inline-flex items-center gap-1 px-2.5 py-1.5 border rounded text-xs hover:bg-gray-50 disabled:opacity-50"><TestTube2 size={13} />测试</button>
-                  <button onClick={() => openEdit(m)} className="inline-flex items-center gap-1 px-2.5 py-1.5 border rounded text-xs hover:bg-gray-50 text-blue-600"><Pencil size={13} />编辑</button>
-                  <button onClick={() => setDeleteTarget(m)} className="inline-flex items-center gap-1 px-2.5 py-1.5 border rounded text-xs hover:bg-gray-50 text-red-500"><Trash2 size={13} />删除</button>
+                  <button onClick={() => testMut.mutate(m.id)} disabled={testMut.isPending} className="medical-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"><TestTube2 size={13} />测试</button>
+                  <button onClick={() => openEdit(m)} className="medical-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#2563EB]"><Pencil size={13} />编辑</button>
+                  <button onClick={() => setDeleteTarget(m)} className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-100"><Trash2 size={13} />删除</button>
                 </div>
               </div>
             </div>
           ))
         }
         {!isLoading && (models as ModelConfig[]).length === 0 && (
-          <div className="bg-white border rounded-lg p-8 text-center text-gray-400">{t('model.empty')}</div>
+          <div className="medical-panel p-8 text-center text-[#6C8580]">{t('model.empty')}</div>
         )}
       </div>
 
@@ -181,11 +187,11 @@ export default function ModelsPage() {
 
       {/* 编辑弹窗 */}
       {editTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditTarget(null)}>
+        <div className="fixed inset-0 bg-[#10201D]/55 flex items-center justify-center z-50" onClick={() => setEditTarget(null)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-[480px]" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">编辑模型</h3>
-              <button onClick={() => setEditTarget(null)} className="text-gray-400 hover:text-black"><X size={16} /></button>
+              <button onClick={() => setEditTarget(null)} className="text-gray-400 hover:text-[#10201D]"><X size={16} /></button>
             </div>
             <form onSubmit={handleEditSubmit(d => updateMut.mutate({ id: editTarget.id, data: d }))} className="space-y-3">
               <div><label className="block text-sm font-medium mb-1">名称 *</label>
@@ -223,12 +229,12 @@ export default function ModelsPage() {
                   {USAGE_TAGS.map(tag => {
                     const sel = editTags.includes(tag)
                     return <button key={tag} type="button" onClick={() => setEditTags(prev => sel ? prev.filter(t => t !== tag) : [...prev, tag])}
-                      className={`text-xs px-3 py-1.5 rounded-full border ${sel ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600'}`}>{tag}</button>
+                      className={`text-xs px-3 py-1.5 rounded-full border ${sel ? 'medical-primary border-[#0F766E]' : 'border-gray-200 text-gray-600'}`}>{tag}</button>
                   })}
                 </div></div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setEditTarget(null)} className="px-4 py-2 border rounded-lg text-sm">取消</button>
-                <button type="submit" disabled={updateMut.isPending} className="flex items-center gap-1.5 px-4 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-50">
+                <button type="submit" disabled={updateMut.isPending} className="flex items-center gap-1.5 px-4 py-2 medical-primary rounded-lg text-sm disabled:opacity-50">
                   {updateMut.isPending && <Loader2 size={13} className="animate-spin" />}保存
                 </button>
               </div>
@@ -246,7 +252,7 @@ export default function ModelsPage() {
 /** 新建模型表单弹窗 */
 function ModelFormModal({ title, onClose, onSubmit, isPending, formTags, setFormTags, register, handleSubmit, configType, setValue }: any) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-[#10201D]/55 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-[480px]" onClick={e => e.stopPropagation()}>
         <h3 className="font-semibold mb-4">{title}</h3>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
@@ -286,11 +292,11 @@ function ModelFormModal({ title, onClose, onSubmit, isPending, formTags, setForm
             <div className="flex flex-wrap gap-2">{[...USAGE_TAGS].map(tag => {
               const sel = formTags.includes(tag)
               return <button key={tag} type="button" onClick={() => setFormTags((prev: string[]) => sel ? prev.filter((t: string) => t !== tag) : [...prev, tag])}
-                className={`text-xs px-3 py-1.5 rounded-full border ${sel ? 'bg-black text-white border-black' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{tag}</button>
+                className={`text-xs px-3 py-1.5 rounded-full border ${sel ? 'medical-primary border-[#0F766E]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{tag}</button>
             })}</div></div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg text-sm">取消</button>
-            <button type="submit" disabled={isPending} className="flex items-center gap-1.5 px-4 py-2 bg-black text-white rounded-lg text-sm disabled:opacity-50">
+            <button type="submit" disabled={isPending} className="flex items-center gap-1.5 px-4 py-2 medical-primary rounded-lg text-sm disabled:opacity-50">
               {isPending && <Loader2 size={13} className="animate-spin" />}保存
             </button>
           </div>

@@ -6,7 +6,7 @@ import { ontologyApi } from '@/api/ontologies'
 import StatusBadge from '@/components/StatusBadge'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import type { OntologyListItem } from '@/types/ontology'
-import { X, Plus } from 'lucide-react'
+import { Database, Plus, Search, X } from 'lucide-react'
 
 export default function OntologyListPage() {
   const [idFilter, setIdFilter] = useState('')
@@ -50,93 +50,96 @@ export default function OntologyListPage() {
   const hasFilters = idFilter || nameFilter || dateFrom || dateTo
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">{t('ontology.title')}</h2>
-        <button onClick={() => navigate('/ontologies/new')}
-          className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800">
-          <Plus size={14} /> {t('ontology.create')}
-        </button>
-      </div>
-
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-2 mb-4 items-end">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">ID</label>
-          <input value={idFilter} onChange={e => setIdFilter(e.target.value)}
-            placeholder={t('ontology.search_id')}
-            className="border rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-black" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">{t('ontology.name')}</label>
-          <input value={nameFilter} onChange={e => setNameFilter(e.target.value)}
-            placeholder={t('ontology.filter_placeholder')}
-            className="border rounded-lg px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-black" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">{t('ontology.date_from')}</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">{t('ontology.date_to')}</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-        </div>
-        {hasFilters && (
-          <button onClick={() => { setIdFilter(''); setNameFilter(''); setDateFrom(''); setDateTo('') }}
-            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 border rounded-lg hover:bg-gray-50 self-end">
-            <X size={14} /> {t('ontology.clear_filter')}
+    <div className="space-y-5">
+      <section className="medical-panel-strong p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="page-kicker">Ontology registry</p>
+            <h2 className="page-title mt-2">{t('ontology.title')}</h2>
+            <p className="page-subtitle mt-2">按工作单管理知识模型，追踪构建方式、实体关系数量和审阅状态。</p>
+          </div>
+          <button onClick={() => navigate('/ontologies/new')} className="medical-primary inline-flex h-10 items-center gap-2 px-4 text-sm">
+            <Plus size={16} /> {t('ontology.create')}
           </button>
-        )}
-        {hasFilters && (
-          <span className="text-xs text-gray-400 self-end pb-2">
-            {t('ontology.count_summary', { filtered: filteredItems.length, total: allItems.length })}
-          </span>
-        )}
+        </div>
+      </section>
+
+      <div className="medical-panel p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[180px_240px_170px_170px_auto] xl:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#55726D]">ID</label>
+            <input value={idFilter} onChange={e => setIdFilter(e.target.value)} placeholder={t('ontology.search_id')} className="medical-input w-full px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#55726D]">{t('ontology.name')}</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8AA39E]" />
+              <input value={nameFilter} onChange={e => setNameFilter(e.target.value)} placeholder={t('ontology.filter_placeholder')} className="medical-input w-full px-3 py-2 pl-8 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#55726D]">{t('ontology.date_from')}</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="medical-input w-full px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#55726D]">{t('ontology.date_to')}</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="medical-input w-full px-3 py-2 text-sm" />
+          </div>
+          <div className="flex items-center gap-3">
+            {hasFilters && (
+              <button onClick={() => { setIdFilter(''); setNameFilter(''); setDateFrom(''); setDateTo('') }} className="medical-secondary inline-flex h-10 items-center gap-1 px-3 text-sm">
+                <X size={14} /> {t('ontology.clear_filter')}
+              </button>
+            )}
+            <span className="text-xs text-[#6C8580]">
+              {t('ontology.count_summary', { filtered: filteredItems.length, total: allItems.length })}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="medical-panel overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="border-b border-[#E2EFEC]">
             <tr>
               {['ID', t('ontology.name'), t('ontology.domain'), '构建方式', '实体', '关系', t('ontology.status'), t('ontology.created_at'), t('ontology.actions')].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-gray-500 font-medium text-xs">{h}</th>
+                <th key={h} className="px-4 py-3 text-left">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-[#E2EFEC]">
             {isLoading ? (
-              <tr><td colSpan={8} className="text-center py-8 text-gray-400">{t('common.loading')}</td></tr>
+              <tr><td colSpan={9} className="py-10 text-center text-[#6C8580]">{t('common.loading')}</td></tr>
             ) : filteredItems.map((o) => (
-              <tr key={o.id} className="border-b hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono text-xs text-gray-400" title={o.id}>{o.id.slice(0, 8)}</td>
-                <td className="px-4 py-3 font-medium">{o.name}</td>
-                <td className="px-4 py-3 text-gray-500">{o.domain}</td>
+              <tr key={o.id}>
+                <td className="px-4 py-3 font-mono text-xs text-[#8AA39E]" title={o.id}>{o.id.slice(0, 8)}</td>
+                <td className="px-4 py-3 font-semibold text-[#10201D]">{o.name}</td>
+                <td className="px-4 py-3 text-[#55726D]">{o.domain}</td>
                 <td className="px-4 py-3">
                   {o.build_mode === 'pipeline_mapping'
-                    ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-50 border border-blue-200 text-blue-700">🔄 Pipeline</span>
-                    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-50 border border-amber-200 text-amber-700">⚡ 简易LLM</span>
+                    ? <span className="inline-flex rounded border border-[#BBD4FF] bg-[#EFF6FF] px-2 py-0.5 text-xs font-medium text-[#2563EB]">Pipeline</span>
+                    : <span className="inline-flex rounded border border-[#F1D49B] bg-[#FFF8E8] px-2 py-0.5 text-xs font-medium text-[#B7791F]">LLM 提取</span>
                   }
                 </td>
-                <td className="px-4 py-3 text-gray-500 font-mono text-xs">{o.entity_count ?? 0}</td>
-                <td className="px-4 py-3 text-gray-500 font-mono text-xs">{o.relation_count ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs text-[#55726D]">{o.entity_count ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs text-[#55726D]">{o.relation_count ?? 0}</td>
                 <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{new Date(o.created_at).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : 'en-US')}</td>
-                <td className="px-4 py-3 space-x-3">
-                  <button onClick={() => navigate(`/ontologies/${o.id}`)}
-                    className="text-blue-600 hover:underline text-xs">{t('ontology.view')}</button>
-                  <button onClick={() => setDeleteTarget({ id: o.id, name: o.name })}
-                    className="text-red-600 hover:underline text-xs">{t('ontology.delete')}</button>
+                <td className="px-4 py-3 text-xs text-[#55726D]">{new Date(o.created_at).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : 'en-US')}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => navigate(`/ontologies/${o.id}`)} className="text-xs font-medium text-[#0F766E] hover:underline">{t('ontology.view')}</button>
+                    <button onClick={() => setDeleteTarget({ id: o.id, name: o.name })} className="text-xs font-medium text-red-600 hover:underline">{t('ontology.delete')}</button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         {!isLoading && filteredItems.length === 0 && (
-          <p className="text-center text-gray-400 py-8">
-            {hasFilters ? t('ontology.no_match') : t('ontology.empty')}
-          </p>
+          <div className="py-12 text-center">
+            <Database size={28} className="mx-auto text-[#8AA39E]" />
+            <p className="mt-3 text-sm text-[#6C8580]">{hasFilters ? t('ontology.no_match') : t('ontology.empty')}</p>
+          </div>
         )}
       </div>
 
