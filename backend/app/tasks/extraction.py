@@ -125,56 +125,141 @@ def _friendly_error(exc: Exception) -> str:
     return message
 
 
-def _rule_based_fallback(text: str, reason: str) -> dict:
-    import re
+def _merge_text(existing: str | None, incoming: str | None, limit: int = 1200) -> str | None:
+    if not incoming:
+        return existing
+    if not existing:
+        return incoming[:limit]
+    if incoming in existing:
+        return existing
+    if existing in incoming:
+        return incoming[:limit]
+    merged = f"{existing}；{incoming}"
+    return merged[:limit]
 
-    candidates: list[str] = []
-    for line in text.splitlines():
-        line = line.strip().strip("|").strip()
-        if not line or set(line) <= {"-", "|", " "}:
-            continue
-        line = re.sub(r"^#{1,6}\s*", "", line)
-        line = re.sub(r"^\*+\s*", "", line)
-        line = re.sub(r"^\d+(?:\.\d+)*[、.\s]+", "", line)
-        parts = [p.strip(" *`：:") for p in re.split(r"\s*\|\s*|[；;]", line) if p.strip(" *`：:")]
-        for part in parts:
-            if 2 <= len(part) <= 40 and not part.isdigit() and part not in {"---"}:
-                candidates.append(part)
 
-    seen = set()
-    entities = []
-    for name in candidates:
-        if name in seen:
-            continue
-        seen.add(name)
-        entities.append({
-            "name_cn": name,
-            "name_en": None,
-            "type": "Concept",
-            "description": "由规则兜底从文档文本中提取，建议人工复核。",
-            "properties": {"source": "rule_fallback"},
-            "confidence": 0.45,
-        })
-        if len(entities) >= 30:
+def _merge_confidence(existing, incoming) -> float:
+    try:
+        left = float(existing)
+    except (TypeError, ValueError):
+        left = 0.0
+    try:
+        right = float(incoming)
+    except (TypeError, ValueError):
+        right = 0.0
+    return max(left, right, 0.85)
+
+
+def _merge_name_list(existing, incoming, limit: int = 8) -> list:
+    merged: list = []
+    for item in list(existing or []) + list(incoming or []):
+        if item and item not in merged:
+            merged.append(item)
+        if len(merged) >= limit:
             break
+    return merged
 
-    if not entities:
-        entities = [{
-            "name_cn": "文档概念",
-            "name_en": "DocumentConcept",
-            "type": "Concept",
-            "description": "LLM 不可用且规则未识别出明确实体，请人工补充。",
-            "properties": {"source": "rule_fallback"},
-            "confidence": 0.3,
-        }]
 
-    return {
-        "entities": entities,
-        "relations": [],
-        "logic_rules": [],
-        "actions": [],
-        "_fallback": {"method": "rule_based", "reason": reason},
+def _merge_ontology_results(base: dict, incoming: dict) -> dict:
+    base.setdefault("entities", [])
+    base.setdefault("relations", [])
+    base.setdefault("logic_rules", [])
+    base.setdefault("actions", [])
+
+    entity_map = {
+        e.get("name_cn") or e.get("name"): e
+        for e in base["entities"]
+        if e.get("name_cn") or e.get("name")
     }
+    for item in incoming.get("entities", []) or []:
+        name = item.get("name_cn") or item.get("name")
+        if not name:
+            continue
+        props = item.get("properties") or item.get("attributes") or item.get("attrs") or {}
+        if not isinstance(props, dict):
+            props = {}
+        item["name_cn"] = name
+        item["properties"] = props
+        existing = entity_map.get(name)
+        if not existing:
+            base["entities"].append(item)
+            entity_map[name] = item
+            continue
+        if item.get("name_en") and not existing.get("name_en"):
+            existing["name_en"] = item["name_en"]
+        if item.get("type"):
+            existing["type"] = existing.get("type") or item["type"]
+        existing["description"] = _merge_text(existing.get("description"), item.get("description"))
+        existing["properties"] = {**(existing.get("properties") or {}), **props}
+        existing["confidence"] = _merge_confidence(existing.get("confidence"), item.get("confidence"))
+
+    rel_keys = {
+        (r.get("source") or r.get("source_entity"), r.get("type", "关联"), r.get("target") or r.get("target_entity"))
+        for r in base["relations"]
+    }
+    for rel in incoming.get("relations", []) or []:
+        src = rel.get("source") or rel.get("source_entity")
+        tgt = rel.get("target") or rel.get("target_entity")
+        rel_type = rel.get("type", "关联")
+        key = (src, rel_type, tgt)
+        if src and tgt and key not in rel_keys:
+            base["relations"].append({
+                **rel,
+                "source": src,
+                "target": tgt,
+                "type": rel_type,
+                "confidence": rel.get("confidence", 0.85),
+            })
+            rel_keys.add(key)
+
+    rule_map = {
+        r.get("name_cn") or r.get("name"): r
+        for r in base["logic_rules"]
+        if r.get("name_cn") or r.get("name")
+    }
+    for rule in incoming.get("logic_rules", []) or []:
+        name = rule.get("name_cn") or rule.get("name")
+        if not name:
+            continue
+        rule["name_cn"] = name
+        existing = rule_map.get(name)
+        if not existing:
+            base["logic_rules"].append(rule)
+            rule_map[name] = rule
+            continue
+        if rule.get("name_en") and not existing.get("name_en"):
+            existing["name_en"] = rule["name_en"]
+        existing["formula"] = _merge_text(existing.get("formula"), rule.get("formula"), limit=1600)
+        existing["description"] = _merge_text(existing.get("description"), rule.get("description"))
+        existing["linked_entities"] = _merge_name_list(existing.get("linked_entities"), rule.get("linked_entities"), limit=12)
+        existing["confidence"] = _merge_confidence(existing.get("confidence"), rule.get("confidence"))
+
+    action_map = {
+        a.get("name_cn") or a.get("name"): a
+        for a in base["actions"]
+        if a.get("name_cn") or a.get("name")
+    }
+    for action in incoming.get("actions", []) or []:
+        name = action.get("name_cn") or action.get("name")
+        if not name:
+            continue
+        action["name_cn"] = name
+        existing = action_map.get(name)
+        if not existing:
+            base["actions"].append(action)
+            action_map[name] = action
+            continue
+        if action.get("name_en") and not existing.get("name_en"):
+            existing["name_en"] = action["name_en"]
+        existing["description"] = _merge_text(existing.get("description"), action.get("description"))
+        existing["execution_rule"] = _merge_text(existing.get("execution_rule"), action.get("execution_rule"), limit=1600)
+        if action.get("function_code") and len(action.get("function_code", "")) > len(existing.get("function_code") or ""):
+            existing["function_code"] = action["function_code"]
+        existing["linked_entities"] = _merge_name_list(existing.get("linked_entities"), action.get("linked_entities"), limit=12)
+        existing["linked_logic_names"] = _merge_name_list(existing.get("linked_logic_names"), action.get("linked_logic_names"), limit=12)
+        existing["confidence"] = _merge_confidence(existing.get("confidence"), action.get("confidence"))
+
+    return base
 
 
 def _abort_if_terminal(db, task_id: str) -> bool:
@@ -271,7 +356,7 @@ def run_extraction(self, task_id: str):
     from app.models.relation import Relation
     from app.models.ontology import OntologyProject
     from app.models.user import User  # noqa: F401 - register users table for FK resolution in Celery
-    from app.services.llm_service import extract_ontology, infer_relations
+    from app.services.llm_service import extract_ontology, infer_relations, split_text_for_extraction
     from app.services.encryption_service import decrypt
     import uuid
 
@@ -314,9 +399,6 @@ def run_extraction(self, task_id: str):
             _fail_task(db, task, "Model or prompt not found")
             return
 
-        task.progress = {"stage": "calling LLM", "pct": 40}
-        db.commit()
-
         model_name = task.parameters.get("model_name", "")
         config_dict = {
             "provider": model_cfg.provider,
@@ -330,13 +412,40 @@ def run_extraction(self, task_id: str):
         if constraints:
             prompt_content += "\n\n" + "\n".join(constraints)
 
-        # ── Pass 1: main extraction ──────────────────────────────────────────
-        fallback_warning = None
-        try:
-            result = extract_ontology(combined_text, prompt_content, config_dict, model_name)
-        except Exception as e:
-            fallback_warning = _friendly_error(e)
-            result = _rule_based_fallback(combined_text, fallback_warning)
+        # ── Pass 1: incremental chunk extraction ─────────────────────────────
+        chunk_warnings: list[str] = []
+        chunks = split_text_for_extraction(combined_text, config_dict, prompt_content, model_name)
+        result = {"entities": [], "relations": [], "logic_rules": [], "actions": []}
+        for idx, chunk in enumerate(chunks, start=1):
+            pct = 25 + int((idx - 1) / max(1, len(chunks)) * 35)
+            task.progress = {
+                "stage": "calling LLM",
+                "pct": pct,
+                "chunk": idx,
+                "chunks": len(chunks),
+            }
+            db.commit()
+            try:
+                chunk_prompt = prompt_content
+                if len(chunks) > 1:
+                    chunk_prompt += (
+                        f"\n\n当前为第 {idx}/{len(chunks)} 个文档分片。"
+                        "请只抽取该分片中明确出现的实体、关系、规则和动作；"
+                        "不要因为缺少其他分片上下文而编造内容。"
+                    )
+                chunk_result = extract_ontology(chunk, chunk_prompt, config_dict, model_name)
+                result = _merge_ontology_results(result, chunk_result)
+            except Exception as e:
+                chunk_warnings.append(f"分片 {idx}/{len(chunks)} 抽取失败：{_friendly_error(e)}")
+            if _abort_if_terminal(db, task_id):
+                return
+
+        if not any(result.get(key) for key in ("entities", "relations", "logic_rules", "actions")):
+            reason = "；".join(chunk_warnings[:3]) or "模型未返回可用的实体、关系、规则或动作。"
+            if len(chunk_warnings) > 3:
+                reason += f"；另有 {len(chunk_warnings) - 3} 个分片失败。"
+            _fail_task(db, task, f"LLM 抽取失败，未生成规则兜底实体，请检查模型服务或模型配置后重试。原因：{reason}")
+            return
         if _abort_if_terminal(db, task_id):
             return
 
@@ -350,13 +459,20 @@ def run_extraction(self, task_id: str):
         from app.engine.post_harness.validator import PostHarnessValidator
         validator = PostHarnessValidator()
         v_report  = validator.validate(result)
-        if fallback_warning:
+        if chunk_warnings:
             from app.engine.post_harness.validator import Severity
-            v_report.add(
-                Severity.WARNING,
-                "LLM_FALLBACK_USED",
-                f"LLM 调用失败，已使用规则兜底生成基础实体。原因：{fallback_warning}",
-            )
+            for warning in chunk_warnings[:5]:
+                v_report.add(
+                    Severity.WARNING,
+                    "LLM_CHUNK_FAILED",
+                    warning,
+                )
+            if len(chunk_warnings) > 5:
+                v_report.add(
+                    Severity.WARNING,
+                    "LLM_CHUNK_FAILED",
+                    f"另有 {len(chunk_warnings) - 5} 个分片抽取失败，已跳过。",
+                )
         task.validation_report = v_report.to_dict()
         db.commit()
 
@@ -384,7 +500,7 @@ def run_extraction(self, task_id: str):
         # Trigger when globally sparse OR >30% of entities are isolated
         sparse = relation_count < max(5, entity_count * 0.4)
         many_isolated = isolated_count > max(2, entity_count * 0.3)
-        if entity_count >= 5 and (sparse or many_isolated) and not fallback_warning:
+        if entity_count >= 5 and (sparse or many_isolated):
             task.progress = {"stage": "inferring relations", "pct": 75}
             db.commit()
             extra_rels = infer_relations(

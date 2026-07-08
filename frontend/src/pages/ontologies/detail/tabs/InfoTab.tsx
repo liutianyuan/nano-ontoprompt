@@ -376,7 +376,6 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
 
   const isPipelineMode = ontology.build_mode === 'pipeline_mapping'
   const isMedical = ontology.domain === '医疗'
-  const buildModeLabel = isPipelineMode ? 'Pipeline Mapping' : '简易 LLM 提取'
   const statusLabel = ontology.status === 'created' ? '已入库' : ontology.status === 'creating' ? '建模中' : ontology.status
 
   return (
@@ -528,38 +527,6 @@ export default function InfoTab({ ontology }: { ontology: OntologyDetail }) {
       </div>
 
       <aside className="space-y-5">
-        <div className="rounded-lg border border-[#B9DCD6] bg-[#10201D] p-5 text-white shadow-sm">
-          <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10">
-              <Activity size={18} />
-            </span>
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.14em] text-[#9FD4CD]">Model vitals</p>
-              <h3 className="text-base font-semibold">知识模型生命体征</h3>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-md border border-white/[0.15] bg-white/[0.08] p-3">
-              <p className="text-[11px] text-[#9FD4CD]">资料数</p>
-              <p className="mt-1 text-2xl font-semibold">{fileList.length}</p>
-            </div>
-            <div className="rounded-md border border-white/[0.15] bg-white/[0.08] p-3">
-              <p className="text-[11px] text-[#9FD4CD]">约束</p>
-              <p className="mt-1 text-2xl font-semibold">{activeConstraints.length}</p>
-            </div>
-            <div className="col-span-2 rounded-md border border-white/[0.15] bg-white/[0.08] p-3">
-              <p className="text-[11px] text-[#9FD4CD]">构建方式</p>
-              <p className="mt-1 text-sm font-semibold">{buildModeLabel}</p>
-            </div>
-          </div>
-          <div className="mt-5 h-12 text-[#9FD4CD]">
-            <svg viewBox="0 0 360 54" fill="none" className="h-full w-full">
-              <path d="M0 30 H62 L75 30 L88 9 L104 47 L119 30 H162 L176 30 L187 21 L205 39 L220 30 H360" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M0 48 H360" stroke="currentColor" strokeWidth="1" strokeDasharray="3 9" opacity=".35" />
-            </svg>
-          </div>
-        </div>
-
         <div className="rounded-lg border border-[#CFE7E2] bg-white p-5 shadow-sm">
           <SectionHeading icon={ShieldCheck} eyebrow="Handoff" title={t('extract.export')} />
           <div className="flex flex-wrap gap-2">

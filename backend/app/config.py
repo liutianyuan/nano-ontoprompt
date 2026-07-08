@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     llm_max_timeout_seconds: int = 1800
     llm_retry_count: int = 1
     llm_max_tokens: int = 4096
+    llm_context_window_tokens: int = 128000
+    llm_context_reserve_tokens: int = 1024
+    llm_extraction_chunk_tokens: int = 50000
+    llm_extraction_chunk_overlap_tokens: int = 1200
     extraction_stall_timeout_seconds: int = 600
 
     # 上传限制

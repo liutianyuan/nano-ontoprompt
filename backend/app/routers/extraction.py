@@ -46,6 +46,8 @@ def _normalize_task_status(db: Session, task: ExtractionTask) -> ExtractionTask:
         stall_timeout = settings.extraction_stall_timeout_seconds
         if progress.get("stage") in {"calling LLM", "inferring relations"}:
             stall_timeout = max(stall_timeout, settings.llm_max_timeout_seconds + 60)
+            if progress.get("chunks"):
+                stall_timeout = max(stall_timeout, (settings.llm_max_timeout_seconds + 60) * int(progress.get("chunks") or 1))
         if updated_at and (datetime.now(timezone.utc) - updated_at).total_seconds() > stall_timeout:
             progress = task.progress or {}
             task.status = "failed"

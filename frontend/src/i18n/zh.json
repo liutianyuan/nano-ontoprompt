@@ -74,7 +74,7 @@
       "actions": "动作",
       "statemachine": "状态机"
     },
-    "back": "← 返回"
+    "back": "返回"
   },
   "files": {
     "uploading": "正在上传 {{current}} / {{total}}…",

@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from typing import Any, Optional
 from app.config import settings
@@ -34,6 +35,201 @@ def _llm_max_tokens(model_config: dict) -> int:
     return min(max_tokens, settings.llm_max_tokens)
 
 
+def _llm_context_window(model_config: dict, model_name: str) -> int:
+    options = model_config.get("options") or {}
+    configured = (
+        options.get("max_context_tokens")
+        or options.get("context_window")
+        or options.get("context_window_tokens")
+        or model_config.get("max_context_tokens")
+        or model_config.get("context_window")
+    )
+    default = settings.llm_context_window_tokens
+    lowered = (model_name or "").lower()
+    if "qwen3.6" in lowered or "200k" in lowered:
+        default = 200000
+    return _positive_int(configured, default)
+
+
+def _llm_context_reserve(model_config: dict) -> int:
+    options = model_config.get("options") or {}
+    return _positive_int(
+        options.get("context_reserve_tokens") or model_config.get("context_reserve_tokens"),
+        settings.llm_context_reserve_tokens,
+    )
+
+
+def _llm_max_input_tokens(model_config: dict) -> Optional[int]:
+    options = model_config.get("options") or {}
+    configured = options.get("max_input_tokens") or model_config.get("max_input_tokens")
+    if configured is None:
+        return None
+    return _positive_int(configured, 0) or None
+
+
+def _llm_extraction_chunk_tokens(model_config: dict) -> int:
+    options = model_config.get("options") or {}
+    return _positive_int(
+        options.get("extraction_chunk_tokens") or model_config.get("extraction_chunk_tokens"),
+        settings.llm_extraction_chunk_tokens,
+    )
+
+
+def _llm_extraction_chunk_overlap_tokens(model_config: dict) -> int:
+    options = model_config.get("options") or {}
+    return _positive_int(
+        options.get("extraction_chunk_overlap_tokens") or model_config.get("extraction_chunk_overlap_tokens"),
+        settings.llm_extraction_chunk_overlap_tokens,
+    )
+
+
+def _estimate_tokens(text: str) -> int:
+    if not text:
+        return 0
+    ascii_chars = sum(1 for ch in text if ord(ch) < 128)
+    non_ascii_chars = len(text) - ascii_chars
+    return max(1, math.ceil(ascii_chars / 3) + math.ceil(non_ascii_chars * 1.1))
+
+
+def _truncate_text_to_token_budget(text: str, token_budget: int) -> tuple[str, bool]:
+    if _estimate_tokens(text) <= token_budget:
+        return text, False
+    if token_budget <= 0:
+        return "", True
+
+    low, high = 0, len(text)
+    while low < high:
+        mid = (low + high + 1) // 2
+        if _estimate_tokens(text[:mid]) <= token_budget:
+            low = mid
+        else:
+            high = mid - 1
+    return text[:low].rstrip(), True
+
+
+def _find_chunk_boundary(text: str, start: int, end: int) -> int:
+    if end >= len(text):
+        return len(text)
+    window_start = max(start + 1, end - 2000)
+    candidates = [
+        text.rfind(mark, window_start, end)
+        for mark in ("\n\n", "\n#", "\n---", "。", "；", "\n")
+    ]
+    boundary = max(candidates)
+    return boundary + 1 if boundary > start else end
+
+
+def split_text_for_extraction(
+    text: str,
+    model_config: dict,
+    prompt_content: str = "",
+    model_name: str = "",
+) -> list[str]:
+    chunk_budget = _llm_extraction_chunk_tokens(model_config)
+    if prompt_content:
+        user_prefix = "请从以下文档中提取本体信息，以JSON格式返回：\n\n"
+        max_tokens = _fit_extraction_max_tokens(_llm_max_tokens(model_config), prompt_content, model_config, model_name)
+        available = (
+            _llm_context_window(model_config, model_name)
+            - _estimate_tokens(prompt_content)
+            - _estimate_tokens(user_prefix)
+            - max_tokens
+            - _llm_context_reserve(model_config)
+        )
+        chunk_budget = min(chunk_budget, max(1, available))
+    max_input_tokens = _llm_max_input_tokens(model_config)
+    if max_input_tokens is not None:
+        chunk_budget = min(chunk_budget, max_input_tokens)
+    chunk_budget = max(1000, chunk_budget)
+
+    if _estimate_tokens(text) <= chunk_budget:
+        return [text]
+
+    overlap_budget = min(_llm_extraction_chunk_overlap_tokens(model_config), chunk_budget // 4)
+    chunks: list[str] = []
+    pos = 0
+    text_len = len(text)
+    while pos < text_len:
+        low, high = pos + 1, text_len
+        best = pos + 1
+        while low <= high:
+            mid = (low + high) // 2
+            if _estimate_tokens(text[pos:mid]) <= chunk_budget:
+                best = mid
+                low = mid + 1
+            else:
+                high = mid - 1
+
+        end = _find_chunk_boundary(text, pos, best)
+        chunk = text[pos:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= text_len:
+            break
+
+        overlap_start = end
+        if overlap_budget > 0:
+            low, high = pos, end
+            overlap_start = end
+            while low <= high:
+                mid = (low + high) // 2
+                if _estimate_tokens(text[mid:end]) <= overlap_budget:
+                    overlap_start = mid
+                    high = mid - 1
+                else:
+                    low = mid + 1
+        pos = max(overlap_start, pos + 1)
+
+    return chunks or [text]
+
+
+def _build_extraction_messages(
+    text: str,
+    prompt_content: str,
+    model_config: dict,
+    model_name: str,
+    max_tokens: int,
+) -> tuple[list, bool]:
+    user_prefix = "请从以下文档中提取本体信息，以JSON格式返回：\n\n"
+    truncation_notice = "\n\n[系统提示：原始文档过长，已按模型上下文限制截断；请仅基于可见内容提取。]\n\n"
+    context_window = _llm_context_window(model_config, model_name)
+    reserve_tokens = _llm_context_reserve(model_config)
+    fixed_tokens = _estimate_tokens(prompt_content) + _estimate_tokens(user_prefix) + max_tokens + reserve_tokens
+    text_budget = context_window - fixed_tokens
+    max_input_tokens = _llm_max_input_tokens(model_config)
+    if max_input_tokens is not None:
+        text_budget = min(text_budget, max_input_tokens)
+
+    clipped_text, truncated = _truncate_text_to_token_budget(text, text_budget)
+    if truncated and clipped_text:
+        notice_tokens = _estimate_tokens(truncation_notice)
+        clipped_text, _ = _truncate_text_to_token_budget(clipped_text, max(0, text_budget - notice_tokens))
+        user_content = f"{user_prefix}{clipped_text}{truncation_notice}"
+    else:
+        user_content = f"{user_prefix}{clipped_text}"
+
+    return [
+        {"role": "system", "content": prompt_content},
+        {"role": "user", "content": user_content},
+    ], truncated
+
+
+def _fit_extraction_max_tokens(
+    requested_max_tokens: int,
+    prompt_content: str,
+    model_config: dict,
+    model_name: str,
+) -> int:
+    user_prefix = "请从以下文档中提取本体信息，以JSON格式返回：\n\n"
+    context_window = _llm_context_window(model_config, model_name)
+    reserve_tokens = _llm_context_reserve(model_config)
+    fixed_input_tokens = _estimate_tokens(prompt_content) + _estimate_tokens(user_prefix) + reserve_tokens
+    available = context_window - fixed_input_tokens
+    if available <= 0:
+        return 1
+    return max(1, min(requested_max_tokens, available))
+
+
 def _json_mode_enabled(provider: str, model_config: dict) -> bool:
     options = model_config.get("options") or {}
     if "json_mode" in options:
@@ -48,15 +244,11 @@ def extract_ontology(text: str, prompt_content: str, model_config: dict, model_n
     api_key = model_config.get("api_key", "")
     api_base = model_config.get("api_base")
     timeout = _llm_timeout(model_config)
-    max_tokens = _llm_max_tokens(model_config)
+    max_tokens = _fit_extraction_max_tokens(_llm_max_tokens(model_config), prompt_content, model_config, model_name)
     json_mode = _json_mode_enabled(provider, model_config)
     attempts = retry_count if retry_count is not None else settings.llm_retry_count
     attempts = max(1, attempts)
-
-    messages = [
-        {"role": "system", "content": prompt_content},
-        {"role": "user", "content": f"请从以下文档中提取本体信息，以JSON格式返回：\n\n{text}"},
-    ]
+    messages, _ = _build_extraction_messages(text, prompt_content, model_config, model_name, max_tokens)
 
     last_error: Optional[Exception] = None
     for attempt in range(attempts):
